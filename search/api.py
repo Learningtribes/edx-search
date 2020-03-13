@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 import dateutil.parser
 from django.conf import settings
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 
 from .filter_generator import SearchFilterGenerator
 from .search_engine_base import SearchEngine
@@ -84,54 +84,49 @@ def _format_filter(filter, missing_included=True):
 
 
 def process_range_data(results):
-    """Mainly used for processing range datetime data.
+    """Mainly used for processing range datetime data, including `start` property and combined `status` property(`start` and `end`).
     """
-    start_terms = results.get('facets', {}).get('start', {}).get('terms', {})
-    if start_terms:
-        new_start_terms = defaultdict(int)
+    # For LMS usage
+    if "start" in course_discovery_filter_fields():
+        start_terms = results.get('facets', {}).get('start', {}).get('terms', {})
+        if start_terms:
+            new_start_terms = defaultdict(int)
 
-        for key, value in start_terms.items():
-            key = dateutil.parser.parse(key, ignoretz=True)
+            for key, value in start_terms.items():
+                key = dateutil.parser.parse(key, ignoretz=True)
+                now = datetime.utcnow()
+                new_key = 'future'
+
+                if key < now - timedelta(days=30):
+                    new_key = 'current'
+                elif key <= now:
+                    new_key = 'new'
+                elif key < now + timedelta(days=30):
+                    new_key = 'soon'
+
+                new_start_terms[new_key] += value
+
+            results['facets']['start']['terms'] = new_start_terms
+            results['facets']['start']['total'] = sum(new_start_terms.values())
+
+    # For Studio usage
+    elif "status" in course_discovery_filter_fields():
+        status_terms = defaultdict(int)
+        for course in results.get('results', []):
+            start_term = course.get('data', {}).get('start', None)
+            end_term = course.get('data', {}).get('end', None)
             now = datetime.utcnow()
-            new_key = 'future'
-
-            if key < now - timedelta(days=30):
-                new_key = 'current'
-            elif key <= now:
-                new_key = 'new'
-            elif key < now + timedelta(days=30):
-                new_key = 'soon'
-
-            new_start_terms[new_key] += value
-
-        sorted_new_start_terms = OrderedDict()
-        for key in ['current', 'new', 'soon', 'future']:
-            if key in new_start_terms:
-                sorted_new_start_terms[key] = new_start_terms[key]
-
-        results['facets']['start']['terms'] = sorted_new_start_terms
-        results['facets']['start']['total'] = 4
-
-    end_terms = results.get('facets', {}).get('end', {}).get('terms', {})
-    if end_terms:
-        new_end_terms = defaultdict(int)
-
-        for key, value in end_terms.items():
-            key = dateutil.parser.parse(key, ignoretz=True)
-            now = datetime.utcnow()
-            new_key = 'active'
-            if key < now:
-                new_key = 'archive'
-
-            new_end_terms[new_key] += value
-
-        sorted_new_end_terms = OrderedDict()
-        for key in ['archive', 'active']:
-            if key in new_end_terms:
-                sorted_new_end_terms[key] = new_end_terms[key]
-
-        results['facets']['end']['terms'] = sorted_new_end_terms
-        results['facets']['end']['total'] = 2
+            # start property always has value(not None)
+            if start_term and dateutil.parser.parse(start_term, ignoretz=True) <= now:
+                if end_term and dateutil.parser.parse(end_term, ignoretz=True) <= now:
+                    status_terms['past'] += 1
+                else:
+                    status_terms['current'] += 1
+            else:
+                status_terms['future'] += 1
+                
+        results['facets']['status']['terms'] = status_terms
+        results['facets']['status']['total'] = sum(status_terms.values())
 
     return results
 
@@ -189,16 +184,28 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
                 DateRange(datetime.utcnow() + timedelta(days=30), None))
         })
 
-    end = use_field_dictionary.pop('end', None)
-    if end == 'archive':
+    status = use_field_dictionary.pop('status', None)
+    if status == 'past':
         filter_dictionary.update({
             'end':
             _format_filter(DateRange(None, datetime.utcnow()),
                            missing_included=False)
         })
-    elif end == 'active':
-        filter_dictionary.update(
-            {'end': _format_filter(DateRange(datetime.utcnow(), None))})
+    elif status == 'current':
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(None, datetime.utcnow())),
+            'end':
+            _format_filter(DateRange(datetime.utcnow(), None),
+                           missing_included=True)
+        })
+    elif status == 'future':
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(datetime.utcnow(), None))
+        })
 
     use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 

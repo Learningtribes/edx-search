@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
     name='edx-search',
-    version='1.2.2',
+    version='1.2.3',
     description='Search and index routines for index access',
     author='edX',
     author_email='oscm@edx.org',

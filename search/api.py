@@ -207,7 +207,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
                 DateRange(datetime.utcnow(), None))
         })
 
-    use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
+    if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
+        use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 
     results = searcher.search(
         query_string=search_term,

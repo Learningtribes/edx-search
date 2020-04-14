@@ -57,6 +57,8 @@ def perform_search(
     if not searcher:
         raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
 
+    filter_dictionary = {key:_format_filter(value) for key, value in filter_dictionary.items()}
+
     results = searcher.search_string(
         search_term,
         field_dictionary=field_dictionary,
@@ -197,8 +199,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
             _format_filter(
                 DateRange(None, datetime.utcnow())),
             'end':
-            _format_filter(DateRange(datetime.utcnow(), None),
-                           missing_included=True)
+            _format_filter(DateRange(datetime.utcnow(), None))
         })
     elif status == 'future':
         filter_dictionary.update({

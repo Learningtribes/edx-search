@@ -67,6 +67,7 @@ def perform_search(
         size=size,
         from_=from_,
         doc_type="courseware_content",
+        include_content=True
     )
 
     # post-process the result

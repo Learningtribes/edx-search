@@ -424,6 +424,7 @@ class ElasticSearchEngine(SearchEngine):
                facet_terms=None,
                exclude_ids=None,
                use_field_match=False,
+               include_content=False,
                **kwargs):  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, arguments-differ
         """
         Implements call to search the index for the desired content.
@@ -526,12 +527,20 @@ class ElasticSearchEngine(SearchEngine):
 
         # We have a query string, search all fields for matching text within the "content" node
         if query_string:
-            elastic_queries.append({
-                "query_string": {
-                    "fields": ["content.display_name", "content.number"],
-                    "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
-                }
-            })
+            if include_content:
+                elastic_queries.append({
+                    "query_string": {
+                        "fields": ["content.*"],
+                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
+                    }
+                })
+            else:
+                elastic_queries.append({
+                    "query_string": {
+                        "fields": ["content.display_name", "content.number"],
+                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
+                    }
+                })
 
         if field_dictionary:
             if use_field_match:

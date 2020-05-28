@@ -593,6 +593,7 @@ class ElasticSearchEngine(SearchEngine):
                 body["facets"] = facet_query
 
         try:
+            log.info("search body: %s", body)
             es_response = self._es.search(
                 index=self.index_name,
                 body=body,

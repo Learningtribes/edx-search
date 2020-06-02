@@ -531,14 +531,16 @@ class ElasticSearchEngine(SearchEngine):
                 elastic_queries.append({
                     "query_string": {
                         "fields": ["content.*"],
-                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
+                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
+                        "analyzer": "standard"
                     }
                 })
             else:
                 elastic_queries.append({
                     "query_string": {
                         "fields": ["content.display_name", "content.number"],
-                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
+                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
+                        "analyzer": "standard"
                     }
                 })
 

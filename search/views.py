@@ -206,7 +206,8 @@ def course_discovery(request):
             size=size,
             from_=from_,
             field_dictionary=field_dictionary,
-            user=request.user
+            user=request.user,
+            allow_enrollment_end_filter=True
         )
         log.info('%s courses find', results['total'])
 

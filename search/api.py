@@ -161,9 +161,11 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     if not searcher:
         raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
 
-    filter_dictionary = {
-        "enrollment_end": _format_filter(DateRange(datetime.utcnow(), None))
-    }
+    filter_dictionary = {}
+    if kwargs.get('allow_enrollment_end_filter', False):
+        filter_dictionary.update({
+            "enrollment_end": _format_filter(DateRange(datetime.utcnow(), None))
+        })
     start = use_field_dictionary.pop('start', None)
     if start == 'current':
         filter_dictionary.update({

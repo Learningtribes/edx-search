@@ -140,7 +140,7 @@ def do_search(request, course_id=None):
     # Allow for broad exceptions here - this is an entry point from external reference
     except Exception as err:  # pylint: disable=broad-except
         results = {
-            "error": _('An error occurred when searching for "{search_string}"').format(search_string=search_term)
+            "error": str(err)#_('An error occurred when searching for "{search_string}"').format(search_string=search_term)
         }
         log.exception(
             'Search view exception when searching for %s for user %s: %r',
@@ -207,7 +207,8 @@ def course_discovery(request):
             from_=from_,
             field_dictionary=field_dictionary,
             user=request.user,
-            allow_enrollment_end_filter=True
+            allow_enrollment_end_filter=True,
+            sort_type=request.POST.get('sort_type', '')
         )
         log.info('%s courses find', results['total'])
 

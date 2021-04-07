@@ -207,7 +207,8 @@ def course_discovery(request):
             from_=from_,
             field_dictionary=field_dictionary,
             user=request.user,
-            allow_enrollment_end_filter=True
+            allow_enrollment_end_filter=True,
+            sort_type=request.POST.get('sort_type', '')
         )
         log.info('%s courses find', results['total'])
 

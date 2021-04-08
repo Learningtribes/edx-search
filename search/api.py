@@ -148,15 +148,15 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     # dictionary, and use our own logic upon enrollment dates for these
     sort_args = kwargs.get('sort_type', '').lower()
     if sort_args == '+display_name':
-        sort_args = 'display_name:asc,start:desc'
+        sort_args = 'raw_display_name:asc,start:desc'
     elif sort_args == '-display_name':
-        sort_args = 'display_name:desc,start:desc'
+        sort_args = 'raw_display_name:desc,start:desc'
     elif sort_args == '+start_date':
-        sort_args = 'start:asc,display_name:asc'
+        sort_args = 'start:asc,raw_display_name:asc'
     elif sort_args == '-start_date':
-        sort_args = 'start:desc,display_name:asc'
+        sort_args = 'start:desc,raw_display_name:asc'
     else:
-        sort_args = 'start:desc,display_name:asc'
+        sort_args = 'start:desc,raw_display_name:asc'
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:

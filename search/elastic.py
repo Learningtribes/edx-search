@@ -259,12 +259,15 @@ class ElasticSearchEngine(SearchEngine):
         """ Remove the cached mappings, so that they get loaded from ES next time they are requested """
         ElasticSearchEngine.set_mappings(self.index_name, doc_type, {})
 
-    def __init__(self, index=None):
+    def __init__(self, index=None, index_mappings=None):
         super(ElasticSearchEngine, self).__init__(index)
         es_config = getattr(settings, "ELASTIC_SEARCH_CONFIG", [{}])
         self._es = getattr(settings, "ELASTIC_SEARCH_IMPL", Elasticsearch)(es_config)
         if not self._es.indices.exists(index=self.index_name):
-            self._es.indices.create(index=self.index_name)
+            self._es.indices.create(
+                index=self.index_name, 
+                body=index_mappings if index_mappings else None
+            )
 
     def _check_mappings(self, doc_type, body):
         """
@@ -375,6 +378,64 @@ class ElasticSearchEngine(SearchEngine):
             # log information and re-raise
             log.exception("error while indexing - %s", ex.message)
             raise
+
+    def displace_index_to_alias(self, new_index_name, alias_name, expired_index_name=None):
+        """
+            Displace alias's index & assign with a new index
+            Or
+            Put a alias name for a index
+        """
+
+        try:
+            existing_indexs = list(
+                self._es.indices.get_alias(alias_name).keys()
+            )
+
+            if expired_index_name:
+                self._es.indices.update_aliases(
+                    {
+                        'actions': [
+                            {'remove': {'index': expired_index_name, 'alias': alias_name}},
+                            {'add': {'index': new_index_name, 'alias': alias_name}},
+                        ]
+                    }
+                )
+            elif existing_indexs:
+                actions = [
+                    {
+                        'remove': {
+                            'index': old_index_name, 
+                            'alias': alias_name
+                        }
+                    } for old_index_name in existing_indexs
+                ]
+                actions.append(
+                    {'add': {'index': new_index_name, 'alias': alias_name}}
+                )
+                self._es.indices.update_aliases(
+                    {'actions': actions}
+                )
+            else:
+                self._es.indices.put_alias(
+                    index=new_index_name, name=alias_name
+                )
+
+            return existing_indexs
+
+        except Exception as e:
+            log.exception('error while displacing alias - %s'.format(e.message))
+            raise
+
+    def remove_by_index_name(self, index_name, retry_times=3):
+        """Remove index by index name"""
+        for _ in range(retry_times):
+            try:
+                self._es.indices.delete(index=index_name)
+
+                return
+
+            except Exception as e:
+                log.exception('error while deleting index - %s'.format(e.message))
 
     def remove(self, doc_type, doc_ids, **kwargs):
         """ Implements call to remove the documents from the index """

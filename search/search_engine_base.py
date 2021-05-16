@@ -42,9 +42,14 @@ class SearchEngine(object):
         return self.search(field_dictionary=field_dictionary, **kwargs)
 
     @staticmethod
-    def get_search_engine(index=None):
+    def get_search_engine(index=None, index_mappings=None):
         """
         Returns the desired implementor (defined in settings)
         """
         search_engine_class = _load_class(getattr(settings, "SEARCH_ENGINE", None), None)
-        return search_engine_class(index=index) if search_engine_class else None
+
+        return search_engine_class(
+            index=index, 
+            index_mappings=index_mappings if index_mappings else None
+        ) if search_engine_class else None
+

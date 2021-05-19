@@ -23,6 +23,15 @@ def course_discovery_facets():
     """ Discovery facets to include, by default we specify each filter field with unspecified size attribute """
     return getattr(settings, "COURSE_DISCOVERY_FACETS", {field: {'size': 100} for field in course_discovery_filter_fields()})
 
+
+def program_discovery_filter_fields():
+    """ look up the desired list of program discovery filter fields """
+    return getattr(settings, "PROGRAM_DISCOVERY_FILTERS", DEFAULT_FILTER_FIELDS)
+
+def program_discovery_facets():
+    """ Discovery facets to include, by default we specify each filter field with unspecified size attribute """
+    return getattr(settings, "PROGRAM_DISCOVERY_FACETS", {field: {'size': 100} for field in program_discovery_filter_fields()})
+
 class NoSearchEngineError(Exception):
     """ NoSearchEngineError exception to be thrown if no search engine is specified """
     pass
@@ -248,3 +257,20 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
 
     results = process_range_data(results)
     return results
+
+
+def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
+    """Fetch programs data from ElasticSearch."""
+    searcher = SearchEngine.get_search_engine(getattr(settings, "PROGRAM_INDEX_NAME", "program_index"))
+    if not searcher:
+        raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
+
+    results = searcher.search(
+        query_string=search_term,
+        size=size,
+        from_=from_,
+        facet_terms=program_discovery_facets()
+    )
+
+    return results
+

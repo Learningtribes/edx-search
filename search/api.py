@@ -4,13 +4,18 @@ import dateutil.parser
 from django.conf import settings
 from collections import defaultdict
 
-from .filter_generator import SearchFilterGenerator
+from .filter_generator import SearchFilterGenerator as CourseSearchFilterGenerator
+from .program_filter_generator import SearchFilterGenerator as ProgramSearchFilterGenerator
 from .search_engine_base import SearchEngine
 from .result_processor import SearchResultProcessor
 from .utils import DateRange
 
 # Default filters that we support, override using COURSE_DISCOVERY_FILTERS setting if desired
 DEFAULT_FILTER_FIELDS = ["org", "modes", "language"]
+
+# Default filters that we support, override using PROGRAM_DISCOVERY_FILTERS setting if desired
+DEFAULT_PROGRAM_FILTER_FIELDS = ["language"]
+
 #from xmodule.course_module import CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 CATALOG_VISIBILITY_CATALOG_AND_ABOUT = "both"
 
@@ -26,7 +31,7 @@ def course_discovery_facets():
 
 def program_discovery_filter_fields():
     """ look up the desired list of program discovery filter fields """
-    return getattr(settings, "PROGRAM_DISCOVERY_FILTERS", DEFAULT_FILTER_FIELDS)
+    return getattr(settings, "PROGRAM_DISCOVERY_FILTERS", DEFAULT_PROGRAM_FILTER_FIELDS)
 
 def program_discovery_facets():
     """ Discovery facets to include, by default we specify each filter field with unspecified size attribute """
@@ -57,7 +62,7 @@ def perform_search(
     """ Call the search engine with the appropriate parameters """
     # field_, filter_ and exclude_dictionary(s) can be overridden by calling application
     # field_dictionary includes course if course_id provided
-    (field_dictionary, filter_dictionary, exclude_dictionary) = SearchFilterGenerator.generate_field_filters(
+    (field_dictionary, filter_dictionary, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(
         user=user,
         course_id=course_id
     )
@@ -170,7 +175,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
         use_search_fields.append("course")
-    (search_fields, _, exclude_dictionary) = SearchFilterGenerator.generate_field_filters(**kwargs)
+    (search_fields, _, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(**kwargs)
     use_field_dictionary = {}
     use_field_dictionary.update({field: search_fields[field] for field in search_fields if field in use_search_fields})
     if field_dictionary:
@@ -265,10 +270,13 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     if not searcher:
         raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
 
+    use_field_dictionary, _, _ = ProgramSearchFilterGenerator.generate_field_filters(**kwargs)
+
     results = searcher.search(
         query_string=search_term,
         size=size,
         from_=from_,
+        field_dictionary=use_field_dictionary,
         facet_terms=program_discovery_facets()
     )
 

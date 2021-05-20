@@ -158,7 +158,9 @@ def _process_exclude_dictionary(exclude_dictionary):
 
 
 def _process_facet_terms(facet_terms):
-    """ We have a list of terms with which we return facets """
+    """We have a list of terms with which we return facets.
+       , keyword `facet` would be insteaded by `Aggregations` in the future.
+    """
     elastic_facets = {}
     for facet in facet_terms:
         facet_term = {"field": facet}

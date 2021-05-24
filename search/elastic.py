@@ -596,7 +596,6 @@ class ElasticSearchEngine(SearchEngine):
 
         try:
             log.info("search body: %s", body)
-            print(" ------ search body --------\n {}".format(body))
             es_response = self._es.search(
                 index=self.index_name,
                 body=body,

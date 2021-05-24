@@ -543,6 +543,11 @@ class ElasticSearchEngine(SearchEngine):
                         "analyzer": "standard"
                     }
                 })
+            elastic_queries.append({
+                "term": {
+                    "course_hashtag_list": query_string.encode('utf-8')
+                }
+            })
 
         if field_dictionary:
             if use_field_match:
@@ -570,7 +575,7 @@ class ElasticSearchEngine(SearchEngine):
         if elastic_queries:
             query_segment = {
                 "bool": {
-                    "must": elastic_queries
+                    "should": elastic_queries
                 }
             }
 

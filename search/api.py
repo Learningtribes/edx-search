@@ -19,6 +19,7 @@ DEFAULT_PROGRAM_FILTER_FIELDS = ["language"]
 #from xmodule.course_module import CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 CATALOG_VISIBILITY_CATALOG_AND_ABOUT = "both"
 
+
 def course_discovery_filter_fields():
     """ look up the desired list of course discovery filter fields """
     return getattr(settings, "COURSE_DISCOVERY_FILTERS", DEFAULT_FILTER_FIELDS)
@@ -31,11 +32,24 @@ def course_discovery_facets():
 
 def program_discovery_filter_fields():
     """ look up the desired list of program discovery filter fields """
-    return getattr(settings, "PROGRAM_DISCOVERY_FILTERS", DEFAULT_PROGRAM_FILTER_FIELDS)
+    return getattr(
+        settings,
+        "PROGRAM_DISCOVERY_FILTERS",
+        DEFAULT_PROGRAM_FILTER_FIELDS
+    )
+
 
 def program_discovery_facets():
     """ Discovery facets to include, by default we specify each filter field with unspecified size attribute """
-    return getattr(settings, "PROGRAM_DISCOVERY_FACETS", {field: {'size': 100} for field in program_discovery_filter_fields()})
+    return getattr(
+        settings,
+        "PROGRAM_DISCOVERY_FACETS",
+        {
+            field: {'size': 100}
+            for field in program_discovery_filter_fields()
+        }
+    )
+
 
 class NoSearchEngineError(Exception):
     """ NoSearchEngineError exception to be thrown if no search engine is specified """
@@ -271,6 +285,8 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
 
     use_field_dictionary, _, _ = ProgramSearchFilterGenerator.generate_field_filters(**kwargs)
+    if field_dictionary:
+        use_field_dictionary.update(field_dictionary)
 
     results = searcher.search(
         query_string=search_term,

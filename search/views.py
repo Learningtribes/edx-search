@@ -16,7 +16,8 @@ from .api import (
     perform_search,
     course_discovery_search,
     course_discovery_filter_fields,
-    programs_discovery_search
+    programs_discovery_search,
+    program_discovery_filter_fields
 )
 from .initializer import SearchInitializer
 
@@ -42,7 +43,7 @@ def _process_pagination_values(request):
     return size, from_, page
 
 
-def _process_field_values(request):
+def _course_process_field_values(request):
     """ Create separate dictionary of supported filter values provided """
     field_values = {}
     for field_key in request.POST:
@@ -53,6 +54,17 @@ def _process_field_values(request):
                     field_key)[0] if len(request.POST.getlist(
                         field_key)) == 1 else request.POST.getlist(field_key)
         elif field_key in course_discovery_filter_fields():
+            field_values[field_key] = request.POST[field_key]
+
+    return field_values
+
+
+def _programs_process_field_values(request):
+    """Create separate dictionary of supported filter values provided
+    """
+    field_values = {}
+    for field_key in request.POST:
+        if field_key in program_discovery_filter_fields():
             field_values[field_key] = request.POST[field_key]
 
     return field_values
@@ -195,7 +207,7 @@ def course_discovery(request):
 
     try:
         size, from_, page = _process_pagination_values(request)
-        field_dictionary = _process_field_values(request)
+        field_dictionary = _course_process_field_values(request)
 
         # Analytics - log search request
         track.emit(
@@ -290,11 +302,26 @@ def program_discovery(request):
     }
     status_code = 500
 
+    # Test code
+    # from django.views.decorators.csrf import csrf_exempt
+    # from django.http import QueryDict
+    # request.POST = QueryDict('', mutable=True)
+    # request.POST.update(
+    #     {
+    #         "language": [
+    #                 "fr-fr"
+    #             ],
+    #         "page_no": 1,
+    #         "page_size": 60,
+    #         "search_content": "",
+    #         "sort_type": "+display_name"
+    #     }
+    # )
     search_term = request.POST.get("search_string", None)
 
     try:
         size, from_, page = _process_pagination_values(request)
-        field_dictionary = _process_field_values(request)
+        field_dictionary = _programs_process_field_values(request)
 
         # Analytics - log search request
         track.emit(
@@ -311,7 +338,7 @@ def program_discovery(request):
             size=size,
             from_=from_,
             field_dictionary=field_dictionary,
-            user=request.user,
+            # user=request.user,
             include_course_filter=True
         )
 

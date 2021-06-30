@@ -271,6 +271,11 @@ class ElasticSearchEngine(SearchEngine):
             @type index_mappings:   dict
             @param alias:           index alias name of ES, the index name by alias
             @type alias:            string
+
+            Exceptions:
+                - Arguments: `index` and `alias` are both empty.
+                - More than one index are related with the given `alias` name.
+
         """
         if not index and not alias:
             raise ValidationError(r'invalid arguments, `index name` and `alias` are both empty.')

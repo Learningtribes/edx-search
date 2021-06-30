@@ -4,6 +4,7 @@ import logging
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.validators import ValidationError
 from elasticsearch import Elasticsearch, exceptions
 from elasticsearch.helpers import bulk, BulkIndexError
 
@@ -261,10 +262,38 @@ class ElasticSearchEngine(SearchEngine):
         """ Remove the cached mappings, so that they get loaded from ES next time they are requested """
         ElasticSearchEngine.set_mappings(self.index_name, doc_type, {})
 
-    def __init__(self, index=None, index_mappings=None):
-        super(ElasticSearchEngine, self).__init__(index)
+    def __init__(self, index=None, index_mappings=None, alias=None):
+        """Create ES Engine wrapper instance.
+
+            @param index:           index name of ES
+            @type index:            string
+            @param index_mappings:  index mappings of ES
+            @type index_mappings:   dict
+            @param alias:           index alias name of ES, the index name by alias
+            @type alias:            string
+        """
+        if not index and not alias:
+            raise ValidationError(r'invalid arguments, `index name` and `alias` are both empty.')
+
+        # Get ES instance
         es_config = getattr(settings, "ELASTIC_SEARCH_CONFIG", [{}])
         self._es = getattr(settings, "ELASTIC_SEARCH_IMPL", Elasticsearch)(es_config)
+
+        # Get Real Index name
+        if not index and alias:
+            existing_indexs = list(
+                self._es.indices.get_alias(alias).keys()
+            )
+            if len(existing_indexs) > 1:
+                raise ValidationError(
+                    r'Ambiguous index name in alais query results: {}'.format(existing_indexs)
+                )
+            index = existing_indexs[0]
+
+        # Store index name
+        super(ElasticSearchEngine, self).__init__(index)
+
+        # ES Mapping
         if not self._es.indices.exists(index=self.index_name):
             self._es.indices.create(
                 index=self.index_name, 

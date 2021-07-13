@@ -10,6 +10,7 @@ from elasticsearch.helpers import bulk, BulkIndexError
 from search.api import QueryParseError
 from search.search_engine_base import SearchEngine
 from search.utils import ValueRange, _is_iterable
+from hashtag.models import Hashtag
 
 # log appears to be standard name used for logger
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -525,6 +526,10 @@ class ElasticSearchEngine(SearchEngine):
         elastic_queries = []
         elastic_filters = []
 
+        hashtag_query = Hashtag.objects.filter(name__icontains=query_string)
+        hashtag_query_id_list = list(hashtag_query.values('id'))
+        print('------hashtag_query_id_list------', hashtag_query_id_list)
+
         # We have a query string, search all fields for matching text within the "content" node
         if query_string:
             if include_content:
@@ -544,8 +549,8 @@ class ElasticSearchEngine(SearchEngine):
                     }
                 })
             elastic_queries.append({
-                "term": {
-                    "course_hashtag_list": query_string.encode('utf-8')
+                "terms": {
+                    "course_hashtag_list": hashtag_query_id_list
                 }
             })
 
@@ -606,6 +611,7 @@ class ElasticSearchEngine(SearchEngine):
                 body=body,
                 **kwargs
             )
+            print 'kwargs', kwargs
         except exceptions.ElasticsearchException as ex:
             message = unicode(ex)
             if 'QueryParsingException' in message:

@@ -8,6 +8,7 @@ from .filter_generator import SearchFilterGenerator
 from .search_engine_base import SearchEngine
 from .result_processor import SearchResultProcessor
 from .utils import DateRange
+from hashtag.models import Hashtag
 
 # Default filters that we support, override using COURSE_DISCOVERY_FILTERS setting if desired
 DEFAULT_FILTER_FIELDS = ["org", "modes", "language"]
@@ -232,15 +233,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
         use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 
-    print '--- searcher.search ---'
-    print 'search_term: ', search_term
-    print 'size: ', size
-    print 'from_: ', from_
-    print 'field_dictionary: ', use_field_dictionary
-    print 'filter_dictionary: ', filter_dictionary
-    print 'exclude_dictionary: ', exclude_dictionary
-    print 'facet_terms(): ', course_discovery_facets()
-    print 'sort_args: ', sort_args
+    hashtag_query = Hashtag.objects.filter(name__icontains=search_term)
+    hashtag_query_list = list(hashtag_query.values('id'))
 
     results = searcher.search(
         query_string=search_term,
@@ -253,11 +247,9 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         filter_dictionary=filter_dictionary,
         exclude_dictionary=exclude_dictionary,
         facet_terms=course_discovery_facets(),
+        hashtag_query_list=hashtag_query_list,
         sort=sort_args
     )
-
-    print 'type(results)', type(results)
-    print 'results', results
 
     results = process_range_data(results)
     return results

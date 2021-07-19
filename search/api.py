@@ -8,7 +8,6 @@ from .filter_generator import SearchFilterGenerator
 from .search_engine_base import SearchEngine
 from .result_processor import SearchResultProcessor
 from .utils import DateRange
-from hashtag.models import Hashtag
 
 # Default filters that we support, override using COURSE_DISCOVERY_FILTERS setting if desired
 DEFAULT_FILTER_FIELDS = ["org", "modes", "language"]
@@ -233,8 +232,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
         use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 
-    hashtag_query = Hashtag.objects.filter(name__icontains=search_term)
-    hashtag_query_list = list(hashtag_query.values('id'))
+    hashtag_query_list = kwargs.get('hashtag_query_list', [])
 
     results = searcher.search(
         query_string=search_term,

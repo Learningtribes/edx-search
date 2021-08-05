@@ -369,9 +369,9 @@ def program_discovery(request):
 
     # Allow for broad exceptions here - this is an entry point from external reference
     except Exception as err:
-        raise Exception(err)
         results = {
-            "error": _('An error occurred when searching for "{search_string}"').format(search_string=search_term)
+            'error': _('An error occurred when searching for "{search_string}"').format(search_string=search_term),
+            'error_description': str(err)
         }
         log.exception(
             'Search view exception when searching for %s for user %s: %r : %s',

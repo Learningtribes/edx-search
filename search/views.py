@@ -337,7 +337,8 @@ def program_discovery(request):
             from_=from_,
             field_dictionary=field_dictionary,
             # user=request.user,
-            include_course_filter=True
+            include_course_filter=True,
+            sort_type=request.POST.get('sort_type', '')
         )
 
         log.info('%s programs find.', results['total'])

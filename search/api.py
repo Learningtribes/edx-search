@@ -280,9 +280,21 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
 
 def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """Fetch programs data from ElasticSearch."""
-    searcher = SearchEngine.get_search_engine(getattr(settings, "PROGRAM_INDEX_NAME", "program_index"))
+    sort_args = kwargs.get('sort_type', '').lower()
+    if sort_args == '+display_name':
+        sort_args = 'raw_title:asc,uuid:desc'
+    elif sort_args == '-display_name':
+        sort_args = 'raw_title:desc,uuid:desc'
+    elif sort_args == '+start_date':
+        sort_args = 'uuid:asc,raw_title:asc'
+    elif sort_args == '-start_date':
+        sort_args = 'uuid:desc,raw_title:asc'
+    else:
+        sort_args = 'uuid:desc,raw_title:asc'
+
+    searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:
-        raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
+        raise NoSearchEngineError('No search engine specified in settings.SEARCH_ENGINE')
 
     use_field_dictionary, _, _ = ProgramSearchFilterGenerator.generate_field_filters(**kwargs)
     if field_dictionary:
@@ -293,7 +305,8 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         size=size,
         from_=from_,
         field_dictionary=use_field_dictionary,
-        facet_terms=program_discovery_facets()
+        facet_terms=program_discovery_facets(),
+        sort=sort_args
     )
 
     return results

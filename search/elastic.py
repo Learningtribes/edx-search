@@ -635,7 +635,7 @@ class ElasticSearchEngine(SearchEngine):
             else:
                 elastic_queries.append({
                     "query_string": {
-                        "fields": ["content.display_name", "content.number"],
+                        "fields": ["content.display_name", "content.title", "content.number"],
                         "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
                         "analyzer": "standard"
                     }

@@ -314,7 +314,8 @@ def program_discovery(request):
     #         "sort_type": "+display_name"
     #     }
     # )
-    search_term = request.POST.get("search_string", None)
+    search_term = request.POST.get('search_string', None)
+    search_term = search_term if search_term else None
 
     try:
         size, from_, page = _process_pagination_values(request)

@@ -282,15 +282,15 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     """Fetch programs data from ElasticSearch."""
     sort_args = kwargs.get('sort_type', '').lower()
     if sort_args == '+display_name':
-        sort_args = 'raw_title:asc,released_date:desc'
+        sort_args = 'raw_title:asc,start:desc'
     elif sort_args == '-display_name':
-        sort_args = 'raw_title:desc,released_date:desc'
+        sort_args = 'raw_title:desc,start:desc'
     elif sort_args == '+start_date':
-        sort_args = 'released_date:asc,raw_title:asc'
+        sort_args = 'start:asc,raw_title:asc'
     elif sort_args == '-start_date':
-        sort_args = 'released_date:desc,raw_title:asc'
+        sort_args = 'start:desc,raw_title:asc'
     else:
-        sort_args = 'released_date:desc,raw_title:asc'
+        sort_args = 'start:desc,raw_title:asc'
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:

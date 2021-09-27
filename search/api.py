@@ -303,32 +303,43 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     filter_dictionary = {}
     start = use_field_dictionary.pop('start', None)
     if start == 'current':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(None,
-                          datetime.utcnow() - timedelta(days=30)))
-        })
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(
+                        None, datetime.utcnow() - timedelta(days=30)
+                    )
+                )
+            }
+        )
     elif start == 'new':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow() - timedelta(days=30),
-                          datetime.utcnow()))
-        })
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(
+                        datetime.utcnow() - timedelta(days=30), datetime.utcnow()
+                    )
+                )
+            }
+        )
     elif start == 'soon':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow(),
-                          datetime.utcnow() + timedelta(days=30)))
-        })
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(
+                        datetime.utcnow(), datetime.utcnow() + timedelta(days=30)
+                    )
+                )
+            }
+        )
     elif start == 'future':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow() + timedelta(days=30), None))
-        })
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(datetime.utcnow() + timedelta(days=30), None)
+                )
+            }
+        )
 
     results = searcher.search(
         query_string=search_term,

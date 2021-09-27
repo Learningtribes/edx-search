@@ -54,14 +54,13 @@ def _process_field_values(request, allowed_fields):
                     field_key)[0] if len(request.POST.getlist(
                         field_key)) == 1 else request.POST.getlist(field_key)
         elif field_key in allowed_fields:
-            if r'language' == field_key:
-                languages_values = request.POST[field_key]
+            filter_values = request.POST[field_key]
 
-                if ',' in languages_values:
-                    field_values[field_key] = languages_values.split(',')
-                    continue
+            if ',' in filter_values:
+                field_values[field_key] = filter_values.split(',')
+                continue
 
-            field_values[field_key] = request.POST[field_key]
+            field_values[field_key] = filter_values
 
     return field_values
 

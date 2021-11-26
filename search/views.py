@@ -11,7 +11,14 @@ from django.utils.translation import ugettext as _
 from django.views.decorators.http import require_POST
 
 from eventtracking import tracker as track
-from .api import QueryParseError, perform_search, course_discovery_search, course_discovery_filter_fields
+from .api import (
+    QueryParseError,
+    perform_search,
+    course_discovery_search,
+    course_discovery_filter_fields,
+    programs_discovery_search,
+    program_discovery_filter_fields
+)
 from .initializer import SearchInitializer
 
 # log appears to be standard name used for logger
@@ -36,20 +43,34 @@ def _process_pagination_values(request):
     return size, from_, page
 
 
-def _process_field_values(request):
+def _process_field_values(request, allowed_fields):
     """ Create separate dictionary of supported filter values provided """
     field_values = {}
     for field_key in request.POST:
         # Check if the key's value is array so using request.POST.getlist to get array value.
         if field_key.endswith('[]'):
-            if field_key[:-2] in course_discovery_filter_fields():
+            if field_key[:-2] in allowed_fields and request.POST.getlist(field_key):
                 field_values[field_key[:-2]] = request.POST.getlist(
                     field_key)[0] if len(request.POST.getlist(
                         field_key)) == 1 else request.POST.getlist(field_key)
-        elif field_key in course_discovery_filter_fields():
-            field_values[field_key] = request.POST[field_key]
+        elif field_key in allowed_fields:
+            filter_values = request.POST[field_key]
+
+            if ',' in filter_values:
+                field_values[field_key] = filter_values.split(',')
+                continue
+
+            field_values[field_key] = filter_values
 
     return field_values
+
+
+def _course_process_field_values(request):
+    return _process_field_values(request, course_discovery_filter_fields())
+
+
+def _programs_process_field_values(request):
+    return _process_field_values(request, program_discovery_filter_fields())
 
 
 @require_POST
@@ -189,7 +210,7 @@ def course_discovery(request):
 
     try:
         size, from_, page = _process_pagination_values(request)
-        field_dictionary = _process_field_values(request)
+        field_dictionary = _course_process_field_values(request)
 
         # Analytics - log search request
         track.emit(
@@ -243,6 +264,123 @@ def course_discovery(request):
         }
         log.exception(
             'Search view exception when searching for %s for user %s: %r',
+            search_term,
+            request.user.id,
+            err
+        )
+
+    return HttpResponse(
+        json.dumps(results, cls=DjangoJSONEncoder),
+        content_type='application/json',
+        status=status_code
+    )
+
+
+@require_POST
+def program_discovery(request):
+    """
+    Search for programs from ElasticSearch
+
+    Args:
+        request (required) - django request object
+
+    Returns:
+        http json response with the following fields
+            "took" - how many seconds the operation took
+            "total" - how many results were found
+            "max_score" - maximum score from these resutls
+            "results" - json array of result documents
+
+            or
+
+            "error" - displayable information about an error that occured on the server
+
+    POST Params:
+        "search_string" (optional) - text with which to search for courses
+        "page_size" (optional)- how many results to return per page (defaults to 20, with maximum cutoff at 100)
+        "page_index" (optional) - for which page (zero-indexed) to include results (defaults to 0)
+    """
+    results = {
+        "error": _("Nothing to search")
+    }
+    status_code = 500
+
+    # Test code
+    # from django.views.decorators.csrf import csrf_exempt
+    # from django.http import QueryDict
+    # request.POST = QueryDict('', mutable=True)
+    # request.POST.update(
+    #     {
+    #         "language": [
+    #                 "fr-fr"
+    #             ],
+    #         "page_no": 1,
+    #         "page_size": 60,
+    #         "search_content": "",
+    #         "sort_type": "+display_name"
+    #     }
+    # )
+    search_term = request.POST.get('search_string', None)
+    search_term = search_term if search_term else None
+
+    try:
+        size, from_, page = _process_pagination_values(request)
+        field_dictionary = _programs_process_field_values(request)
+
+        # Analytics - log search request
+        track.emit(
+            'edx.course_discovery.search.initiated',
+            {
+                "search_term": search_term,
+                "page_size": size,
+                "page_number": page,
+            }
+        )
+
+        results = programs_discovery_search(
+            search_term=search_term,
+            size=size,
+            from_=from_,
+            field_dictionary=field_dictionary,
+            # user=request.user,
+            include_course_filter=True,
+            sort_type=request.POST.get('sort_type', '')
+        )
+
+        log.info('%s programs find.', results['total'])
+
+        # Analytics - log search results before sending to browser
+        track.emit(
+            'edx.course_discovery.search.results_displayed',
+            {
+                "search_term": search_term,
+                "page_size": size,
+                "page_number": page,
+                "results_count": results["total"],
+            }
+        )
+
+        status_code = 200
+
+    except ValueError as invalid_err:
+        results = {
+            "error": unicode(invalid_err)
+        }
+        log.debug(unicode(invalid_err))
+
+    except QueryParseError:
+        results = {
+            "error": _('Your query seems malformed. Check for unmatched quotes.')
+        }
+
+    # Allow for broad exceptions here - this is an entry point from external reference
+    except Exception as err:
+        results = {
+            'error': _('An error occurred when searching for "{search_string}"').format(search_string=search_term),
+            'error_description': str(err)
+        }
+        log.exception(
+            'Search view exception when searching for %s for user %s: %r : %s',
             search_term,
             request.user.id,
             err

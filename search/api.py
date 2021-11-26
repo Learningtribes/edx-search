@@ -4,15 +4,21 @@ import dateutil.parser
 from django.conf import settings
 from collections import defaultdict
 
-from .filter_generator import SearchFilterGenerator
+from .filter_generator import SearchFilterGenerator as CourseSearchFilterGenerator
+from .program_filter_generator import SearchFilterGenerator as ProgramSearchFilterGenerator
 from .search_engine_base import SearchEngine
 from .result_processor import SearchResultProcessor
 from .utils import DateRange
 
 # Default filters that we support, override using COURSE_DISCOVERY_FILTERS setting if desired
 DEFAULT_FILTER_FIELDS = ["org", "modes", "language"]
+
+# Default filters that we support, override using PROGRAM_DISCOVERY_FILTERS setting if desired
+DEFAULT_PROGRAM_FILTER_FIELDS = ["language"]
+
 #from xmodule.course_module import CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 CATALOG_VISIBILITY_CATALOG_AND_ABOUT = "both"
+
 
 def course_discovery_filter_fields():
     """ look up the desired list of course discovery filter fields """
@@ -22,6 +28,28 @@ def course_discovery_filter_fields():
 def course_discovery_facets():
     """ Discovery facets to include, by default we specify each filter field with unspecified size attribute """
     return getattr(settings, "COURSE_DISCOVERY_FACETS", {field: {'size': 100} for field in course_discovery_filter_fields()})
+
+
+def program_discovery_filter_fields():
+    """ look up the desired list of program discovery filter fields """
+    return getattr(
+        settings,
+        "PROGRAM_DISCOVERY_FILTERS",
+        DEFAULT_PROGRAM_FILTER_FIELDS
+    )
+
+
+def program_discovery_facets():
+    """ Discovery facets to include, by default we specify each filter field with unspecified size attribute """
+    return getattr(
+        settings,
+        "PROGRAM_DISCOVERY_FACETS",
+        {
+            field: {'size': 100}
+            for field in program_discovery_filter_fields()
+        }
+    )
+
 
 class NoSearchEngineError(Exception):
     """ NoSearchEngineError exception to be thrown if no search engine is specified """
@@ -48,7 +76,7 @@ def perform_search(
     """ Call the search engine with the appropriate parameters """
     # field_, filter_ and exclude_dictionary(s) can be overridden by calling application
     # field_dictionary includes course if course_id provided
-    (field_dictionary, filter_dictionary, exclude_dictionary) = SearchFilterGenerator.generate_field_filters(
+    (field_dictionary, filter_dictionary, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(
         user=user,
         course_id=course_id
     )
@@ -161,7 +189,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
         use_search_fields.append("course")
-    (search_fields, _, exclude_dictionary) = SearchFilterGenerator.generate_field_filters(**kwargs)
+    (search_fields, _, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(**kwargs)
     use_field_dictionary = {}
     use_field_dictionary.update({field: search_fields[field] for field in search_fields if field in use_search_fields})
     if field_dictionary:
@@ -248,3 +276,80 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
 
     results = process_range_data(results)
     return results
+
+
+def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
+    """Fetch programs data from ElasticSearch."""
+    sort_args = kwargs.get('sort_type', '').lower()
+    if sort_args == '+display_name':
+        sort_args = 'raw_title:asc,start:desc'
+    elif sort_args == '-display_name':
+        sort_args = 'raw_title:desc,start:desc'
+    elif sort_args == '+start_date':
+        sort_args = 'start:asc,raw_title:asc'
+    elif sort_args == '-start_date':
+        sort_args = 'start:desc,raw_title:asc'
+    else:
+        sort_args = 'start:desc,raw_title:asc'
+
+    searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
+    if not searcher:
+        raise NoSearchEngineError('No search engine specified in settings.SEARCH_ENGINE')
+
+    use_field_dictionary, _, _ = ProgramSearchFilterGenerator.generate_field_filters(**kwargs)
+    if field_dictionary:
+        use_field_dictionary.update(field_dictionary)
+
+    filter_dictionary = {}
+    start = use_field_dictionary.pop('start', None)
+    if start == 'current':
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(
+                        None, datetime.utcnow() - timedelta(days=30)
+                    )
+                )
+            }
+        )
+    elif start == 'new':
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(
+                        datetime.utcnow() - timedelta(days=30), datetime.utcnow()
+                    )
+                )
+            }
+        )
+    elif start == 'soon':
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(
+                        datetime.utcnow(), datetime.utcnow() + timedelta(days=30)
+                    )
+                )
+            }
+        )
+    elif start == 'future':
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(datetime.utcnow() + timedelta(days=30), None)
+                )
+            }
+        )
+
+    results = searcher.search(
+        query_string=search_term,
+        size=size,
+        from_=from_,
+        field_dictionary=use_field_dictionary,
+        # show if no enrollment end is provided and has not yet been reached
+        filter_dictionary=filter_dictionary,
+        facet_terms=program_discovery_facets(),
+        sort=sort_args
+    )
+
+    return process_range_data(results)

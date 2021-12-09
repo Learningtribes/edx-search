@@ -42,9 +42,24 @@ class SearchEngine(object):
         return self.search(field_dictionary=field_dictionary, **kwargs)
 
     @staticmethod
-    def get_search_engine(index=None):
-        """
-        Returns the desired implementor (defined in settings)
+    def get_search_engine(index=None, index_mappings=None, alias=None):
+        """Returns the desired implementor (defined in settings)
+
+            @param index:           index name of ES
+            @type index:            string
+            @param index_mappings:  index mappings of ES
+            @type index_mappings:   dict
+            @param alias:           index alias name of ES
+            @type alias:            string
+            @return:                search engine obj.
+            @rtype:                 python ElasticSearch Engine wrapper class.
+
+            Note: support get index name by `index alias`
         """
         search_engine_class = _load_class(getattr(settings, "SEARCH_ENGINE", None), None)
-        return search_engine_class(index=index) if search_engine_class else None
+
+        return search_engine_class(
+            index=index, 
+            index_mappings=index_mappings if index_mappings else None,
+            alias=alias
+        ) if search_engine_class else None

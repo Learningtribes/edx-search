@@ -522,6 +522,7 @@ class ElasticSearchEngine(SearchEngine):
                exclude_ids=None,
                use_field_match=False,
                include_content=False,
+               hashtag_query_list=None,
                **kwargs):  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, arguments-differ
         """
         Implements call to search the index for the desired content.
@@ -640,6 +641,11 @@ class ElasticSearchEngine(SearchEngine):
                         "analyzer": "standard"
                     }
                 })
+            elastic_queries.append({
+                "terms": {
+                    "course_hashtag_list": hashtag_query_list
+                }
+            })
 
         if field_dictionary:
             if use_field_match:
@@ -667,7 +673,7 @@ class ElasticSearchEngine(SearchEngine):
         if elastic_queries:
             query_segment = {
                 "bool": {
-                    "must": elastic_queries
+                    "should": elastic_queries
                 }
             }
 

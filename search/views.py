@@ -207,6 +207,8 @@ def course_discovery(request):
     status_code = 500
 
     search_term = request.POST.get("search_string", None)
+    course_tag_list_string = request.POST.get("course_tag_list_string", '')
+    course_tag_list = course_tag_list_string.split(', ')
 
     try:
         size, from_, page = _process_pagination_values(request)
@@ -228,6 +230,7 @@ def course_discovery(request):
             from_=from_,
             field_dictionary=field_dictionary,
             user=request.user,
+            course_tag_list=course_tag_list,
             allow_enrollment_end_filter=True,
             sort_type=request.POST.get('sort_type', '')
         )

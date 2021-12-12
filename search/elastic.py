@@ -519,6 +519,7 @@ class ElasticSearchEngine(SearchEngine):
                filter_dictionary=None,
                exclude_dictionary=None,
                facet_terms=None,
+               course_tag_list=None,
                exclude_ids=None,
                use_field_match=False,
                include_content=False,
@@ -640,6 +641,11 @@ class ElasticSearchEngine(SearchEngine):
                         "analyzer": "standard"
                     }
                 })
+            elastic_queries.append({
+                "terms": {
+                    "tag": course_tag_list
+                }
+            })
 
         if field_dictionary:
             if use_field_match:
@@ -667,7 +673,7 @@ class ElasticSearchEngine(SearchEngine):
         if elastic_queries:
             query_segment = {
                 "bool": {
-                    "must": elastic_queries
+                    "should": elastic_queries
                 }
             }
 
@@ -698,6 +704,7 @@ class ElasticSearchEngine(SearchEngine):
                 body=body,
                 **kwargs
             )
+            log.info("search es_response: %s", es_response)
         except exceptions.ElasticsearchException as ex:
             message = unicode(ex)
             if 'QueryParsingException' in message:

@@ -316,7 +316,7 @@ class MockSearchEngine(SearchEngine):
         cls._mock_elastic = {}
         cls._write_to_file()
 
-    def __init__(self, index=None):
+    def __init__(self, index=None, index_mappings=None, alias=None):
         super(MockSearchEngine, self).__init__(index)
         MockSearchEngine.load_index(self.index_name)
 

@@ -184,7 +184,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_display_name:asc'
     else:
-        sort_args = 'start:desc,raw_display_name:asc'
+        raise QueryParseError("sort_type invalid")
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -290,7 +290,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_title:asc'
     else:
-        sort_args = 'start:desc,raw_title:asc'
+        raise QueryParseError("sort_type invalid")
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:

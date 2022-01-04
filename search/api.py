@@ -174,7 +174,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     """
     # We'll ignore the course-enrollemnt informaiton in field and filter
     # dictionary, and use our own logic upon enrollment dates for these
-    sort_args = kwargs.get('sort_type', '').lower()
+    sort_args = kwargs.get('sort_type', '-start_date').lower()
     if sort_args == '+display_name':
         sort_args = 'raw_display_name:asc,start:desc'
     elif sort_args == '-display_name':
@@ -184,7 +184,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_display_name:asc'
     else:
-        raise QueryParseError("sort_type invalid")
+        raise QueryParseError("sort_type should be one of following: +display_name, -display_name, +start_date, -start_date")
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -280,7 +280,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
 
 def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """Fetch programs data from ElasticSearch."""
-    sort_args = kwargs.get('sort_type', '').lower()
+    sort_args = kwargs.get('sort_type', '-start_date').lower()
     if sort_args == '+display_name':
         sort_args = 'raw_title:asc,start:desc'
     elif sort_args == '-display_name':
@@ -290,7 +290,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_title:asc'
     else:
-        raise QueryParseError("sort_type invalid")
+        raise QueryParseError("sort_type should be one of following: +display_name, -display_name, +start_date, -start_date")
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:

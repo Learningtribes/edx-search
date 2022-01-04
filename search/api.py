@@ -182,7 +182,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     """
     # We'll ignore the course-enrollemnt informaiton in field and filter
     # dictionary, and use our own logic upon enrollment dates for these
-    sort_args = kwargs.get('sort_type', '-start_date').lower()
+    sort_args = kwargs.get('sort_type') or '-start_date'
+    sort_args = sort_args.lower()
     if sort_args == '+display_name':
         sort_args = 'raw_display_name:asc,start:desc'
     elif sort_args == '-display_name':
@@ -288,7 +289,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
 
 def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """Fetch programs data from ElasticSearch."""
-    sort_args = kwargs.get('sort_type', '-start_date').lower()
+    sort_args = kwargs.get('sort_type') or '-start_date'
+    sort_args = sort_args.lower()
     if sort_args == '+display_name':
         sort_args = 'raw_title:asc,start:desc'
     elif sort_args == '-display_name':

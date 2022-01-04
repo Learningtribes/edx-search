@@ -188,7 +188,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_display_name:asc'
     else:
-        log.error('sort_type: %s is not allowed', sort_args)
+        log.error('sort_type=[%s] is not allowed', sort_args)
         raise QueryParseError
 
     use_search_fields = ["org"]
@@ -296,7 +296,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_title:asc'
     else:
-        log.error('sort_type: %s is not allowed', sort_args)
+        log.error('sort_type=[%s] is not allowed', sort_args)
         raise QueryParseError
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))

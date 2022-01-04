@@ -1,4 +1,5 @@
 """ search business logic implementations """
+import logging
 from datetime import datetime, timedelta
 import dateutil.parser
 from django.conf import settings
@@ -9,6 +10,8 @@ from .program_filter_generator import SearchFilterGenerator as ProgramSearchFilt
 from .search_engine_base import SearchEngine
 from .result_processor import SearchResultProcessor
 from .utils import DateRange
+
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # Default filters that we support, override using COURSE_DISCOVERY_FILTERS setting if desired
 DEFAULT_FILTER_FIELDS = ["org", "modes", "language"]
@@ -63,14 +66,6 @@ class QueryParseError(Exception):
     more specific exception so the view can provide a more helpful
     error message to the user.
 
-    """
-    pass
-
-
-class SortTypeError(Exception):
-    """
-    SortTypeError exception to be thrown if sort_type is not one of following:
-    +display_name, -display_name, +start_date, -start_date
     """
     pass
 
@@ -193,7 +188,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_display_name:asc'
     else:
-        raise SortTypeError()
+        log.error('sort_type: %s is not allowed', sort_args)
+        raise QueryParseError
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -300,7 +296,8 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_title:asc'
     else:
-        raise SortTypeError()
+        log.error('sort_type: %s is not allowed', sort_args)
+        raise QueryParseError
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:

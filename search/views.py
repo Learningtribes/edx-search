@@ -13,7 +13,6 @@ from django.views.decorators.http import require_POST
 from eventtracking import tracker as track
 from .api import (
     QueryParseError,
-    SortTypeError,
     perform_search,
     course_discovery_search,
     course_discovery_filter_fields,
@@ -159,11 +158,6 @@ def do_search(request, course_id=None):
             "error": _('Your query seems malformed. Check for unmatched quotes.')
         }
 
-    except SortTypeError:
-        results = {
-            "error": _('sort_type should be one of following: +display_name, -display_name, +start_date, -start_date')
-        }
-
     # Allow for broad exceptions here - this is an entry point from external reference
     except Exception as err:  # pylint: disable=broad-except
         results = {
@@ -261,11 +255,6 @@ def course_discovery(request):
     except QueryParseError:
         results = {
             "error": _('Your query seems malformed. Check for unmatched quotes.')
-        }
-
-    except SortTypeError:
-        results = {
-            "error": _('sort_type should be one of following: +display_name, -display_name, +start_date, -start_date')
         }
 
     # Allow for broad exceptions here - this is an entry point from external reference
@@ -382,11 +371,6 @@ def program_discovery(request):
     except QueryParseError:
         results = {
             "error": _('Your query seems malformed. Check for unmatched quotes.')
-        }
-
-    except SortTypeError:
-        results = {
-            "error": _('sort_type should be one of following: +display_name, -display_name, +start_date, -start_date')
         }
 
     # Allow for broad exceptions here - this is an entry point from external reference

@@ -67,6 +67,14 @@ class QueryParseError(Exception):
     pass
 
 
+class SortTypeError(Exception):
+    """
+    SortTypeError exception to be thrown if sort_type is not one of following:
+    +display_name, -display_name, +start_date, -start_date
+    """
+    pass
+
+
 def perform_search(
         search_term,
         user=None,
@@ -184,7 +192,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_display_name:asc'
     else:
-        raise QueryParseError("sort_type should be one of following: +display_name, -display_name, +start_date, -start_date")
+        raise SortTypeError()
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -290,7 +298,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_title:asc'
     else:
-        raise QueryParseError("sort_type should be one of following: +display_name, -display_name, +start_date, -start_date")
+        raise SortTypeError()
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:

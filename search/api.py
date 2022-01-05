@@ -1,4 +1,5 @@
 """ search business logic implementations """
+import logging
 from datetime import datetime, timedelta
 import dateutil.parser
 from django.conf import settings
@@ -9,6 +10,8 @@ from .program_filter_generator import SearchFilterGenerator as ProgramSearchFilt
 from .search_engine_base import SearchEngine
 from .result_processor import SearchResultProcessor
 from .utils import DateRange
+
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # Default filters that we support, override using COURSE_DISCOVERY_FILTERS setting if desired
 DEFAULT_FILTER_FIELDS = ["org", "modes", "language"]
@@ -174,7 +177,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     """
     # We'll ignore the course-enrollemnt informaiton in field and filter
     # dictionary, and use our own logic upon enrollment dates for these
-    sort_args = kwargs.get('sort_type', '').lower()
+    sort_args = kwargs.get('sort_type') or '-start_date'
+    sort_args = sort_args.lower()
     if sort_args == '+display_name':
         sort_args = 'raw_display_name:asc,start:desc'
     elif sort_args == '-display_name':
@@ -184,7 +188,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_display_name:asc'
     else:
-        sort_args = 'start:desc,raw_display_name:asc'
+        log.error('sort_type=[%s] is not allowed', sort_args)
+        raise QueryParseError
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -280,7 +285,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
 
 def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """Fetch programs data from ElasticSearch."""
-    sort_args = kwargs.get('sort_type', '').lower()
+    sort_args = kwargs.get('sort_type') or '-start_date'
+    sort_args = sort_args.lower()
     if sort_args == '+display_name':
         sort_args = 'raw_title:asc,start:desc'
     elif sort_args == '-display_name':
@@ -290,7 +296,8 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_title:asc'
     else:
-        sort_args = 'start:desc,raw_title:asc'
+        log.error('sort_type=[%s] is not allowed', sort_args)
+        raise QueryParseError
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:

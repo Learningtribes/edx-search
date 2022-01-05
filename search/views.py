@@ -229,7 +229,7 @@ def course_discovery(request):
             field_dictionary=field_dictionary,
             user=request.user,
             allow_enrollment_end_filter=True,
-            sort_type=request.POST.get('sort_type', '')
+            sort_type=request.POST.get('sort_type')
         )
         log.info('%s courses find', results['total'])
 
@@ -344,7 +344,7 @@ def program_discovery(request):
             field_dictionary=field_dictionary,
             # user=request.user,
             include_course_filter=True,
-            sort_type=request.POST.get('sort_type', '')
+            sort_type=request.POST.get('sort_type')
         )
 
         log.info('%s programs find.', results['total'])

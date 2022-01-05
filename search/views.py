@@ -208,6 +208,10 @@ def course_discovery(request):
 
     search_term = request.POST.get("search_string", None)
 
+    # Search tag by input with the course search
+    # course_tag_list_string = request.POST.get("course_tag_list_string", '')
+    # course_tag_list = course_tag_list_string.split(', ')
+
     try:
         size, from_, page = _process_pagination_values(request)
         field_dictionary = _course_process_field_values(request)
@@ -228,6 +232,7 @@ def course_discovery(request):
             from_=from_,
             field_dictionary=field_dictionary,
             user=request.user,
+            # course_tag_list=course_tag_list,
             allow_enrollment_end_filter=True,
             sort_type=request.POST.get('sort_type')
         )

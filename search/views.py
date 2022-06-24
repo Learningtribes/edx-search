@@ -353,7 +353,7 @@ def program_discovery(request):
             sort_type=request.POST.get('sort_type')
         )
         for p in results['results']:
-            start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%Z').replace(tzinfo=UTC)
+            start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
             p['data']['non_started'] = has_started(start)
 
         log.info('%s programs find.', results['total'])
@@ -409,4 +409,4 @@ def has_started(start_date):
     Arguments:
         start_date (datetime): The start datetime of the course in question.
     """
-    return datetime.now(utc) > start_date if start_date is not None else False
+    return datetime.now(UTC) > start_date if start_date is not None else False

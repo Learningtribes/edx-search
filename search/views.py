@@ -10,9 +10,11 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
 from django.utils.translation import ugettext as _
 from django.views.decorators.http import require_POST
+from django.utils.translation import ugettext as _
 from pytz import UTC
 
 from eventtracking import tracker as track
+from util.date_utils import strftime_localized
 from .api import (
     QueryParseError,
     perform_search,

@@ -4,11 +4,13 @@
 import logging
 import json
 
+from datetime import datetime
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
 from django.utils.translation import ugettext as _
 from django.views.decorators.http import require_POST
+from pytz import UTC
 
 from eventtracking import tracker as track
 from .api import (
@@ -231,6 +233,10 @@ def course_discovery(request):
             allow_enrollment_end_filter=True,
             sort_type=request.POST.get('sort_type')
         )
+        for c in results['results']:
+            start = c['data']['start'].replace("+00:00", "Z")
+            start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
+            c['data']['non_started'] = has_started(start)
         log.info('%s courses find', results['total'])
 
         # Analytics - log search results before sending to browser
@@ -346,6 +352,9 @@ def program_discovery(request):
             include_course_filter=True,
             sort_type=request.POST.get('sort_type')
         )
+        for p in results['results']:
+            start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%Z').replace(tzinfo=UTC)
+            p['data']['non_started'] = has_started(start)
 
         log.info('%s programs find.', results['total'])
 
@@ -391,3 +400,13 @@ def program_discovery(request):
         content_type='application/json',
         status=status_code
     )
+
+
+def has_started(start_date):
+    """
+    Given a course or program's start datetime, returns whether the current time's past it.
+
+    Arguments:
+        start_date (datetime): The start datetime of the course in question.
+    """
+    return datetime.now(utc) > start_date if start_date is not None else False

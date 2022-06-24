@@ -236,7 +236,7 @@ def course_discovery(request):
         for c in results['results']:
             start = c['data']['start'].replace("+00:00", "Z")
             start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
-            c['data']['non_started'] = has_started(start)
+            c['data']['non_started'] = not has_started(start)
         log.info('%s courses find', results['total'])
 
         # Analytics - log search results before sending to browser
@@ -354,7 +354,7 @@ def program_discovery(request):
         )
         for p in results['results']:
             start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
-            p['data']['non_started'] = has_started(start)
+            p['data']['non_started'] = not has_started(start)
 
         log.info('%s programs find.', results['total'])
 

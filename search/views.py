@@ -8,13 +8,11 @@ from datetime import datetime
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
-from django.utils import translation
-from django.views.decorators.http import require_POST
 from django.utils.translation import ugettext as _
+from django.views.decorators.http import require_POST
 from pytz import UTC
 
 from eventtracking import tracker as track
-from util.date_utils import strftime_localized
 from .api import (
     QueryParseError,
     perform_search,
@@ -235,12 +233,10 @@ def course_discovery(request):
             allow_enrollment_end_filter=True,
             sort_type=request.POST.get('sort_type')
         )
-        user_language = translation.get_language()
         for c in results['results']:
             start = c['data']['start'].replace("+00:00", "Z")
             start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
             c['data']['non_started'] = not has_started(start)
-            c['data']['non_started_string'] = _("The course will start on {date}")
         log.info('%s courses find', results['total'])
 
         # Analytics - log search results before sending to browser

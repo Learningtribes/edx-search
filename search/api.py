@@ -303,7 +303,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     if not searcher:
         raise NoSearchEngineError('No search engine specified in settings.SEARCH_ENGINE')
 
-    use_field_dictionary, _, _ = ProgramSearchFilterGenerator.generate_field_filters(**kwargs)
+    use_field_dictionary, _, exclude_dictionary = ProgramSearchFilterGenerator.generate_field_filters(**kwargs)
     if field_dictionary:
         use_field_dictionary.update(field_dictionary)
 
@@ -355,6 +355,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         field_dictionary=use_field_dictionary,
         # show if no enrollment end is provided and has not yet been reached
         filter_dictionary=filter_dictionary,
+        exclude_dictionary=exclude_dictionary,
         facet_terms=program_discovery_facets(),
         sort=sort_args
     )

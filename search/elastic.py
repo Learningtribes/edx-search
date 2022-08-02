@@ -630,8 +630,8 @@ class ElasticSearchEngine(SearchEngine):
                     "match": {
                         field: {
                             "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
-                            "fuzziness": "AUTO",
-                            "operator": "AND" if field != "content.number" else 0,
+                            "fuzziness": "AUTO" if field != "content.number" else 0,
+                            "operator": "AND",
                             "analyzer": "standard"
                         }
                     }

@@ -621,26 +621,21 @@ class ElasticSearchEngine(SearchEngine):
 
         elastic_queries = []
         elastic_filters = []
+        content_fields = ["content.display_name", "content.title", "content.number"]
 
         # We have a query string, search all fields for matching text within the "content" node
         if query_string:
-            if include_content:
+            for field in content_fields:
                 elastic_queries.append({
-                    "query_string": {
-                        "fields": ["content.*"],
-                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
-                        "analyzer": "standard"
+                    "match": {
+                        field: {
+                            "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
+                            "fuzziness": 1 if field != "content.number" else 0,
+                            "operator": "AND",
+                            "analyzer": "standard"
+                        }
                     }
                 })
-            else:
-                elastic_queries.append({
-                    "query_string": {
-                        "fields": ["content.display_name", "content.title", "content.number"],
-                        "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
-                        "analyzer": "standard"
-                    }
-                })
-
         if field_dictionary:
             if use_field_match:
                 elastic_queries.extend(_process_field_queries(field_dictionary))
@@ -667,7 +662,7 @@ class ElasticSearchEngine(SearchEngine):
         if elastic_queries:
             query_segment = {
                 "bool": {
-                    "must": elastic_queries
+                    "should": elastic_queries
                 }
             }
 

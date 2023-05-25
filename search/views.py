@@ -356,7 +356,7 @@ def program_discovery(request):
             start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
             p['data']['non_started'] = not has_started(start)
 
-        log.info('%s programs find.', results['total'])
+        log.info('%s programs find..', results['total'])
 
         # Analytics - log search results before sending to browser
         track.emit(

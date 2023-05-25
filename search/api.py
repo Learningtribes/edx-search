@@ -265,6 +265,15 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
         use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 
+    exclude = search_fields.get('exclude', None)
+    if 'archived' == exclude:
+        filter_dictionary.update(
+            {
+                'start': _format_filter(DateRange(None, datetime.utcnow())),
+                'end': _format_filter(DateRange(datetime.utcnow(), None))
+            }
+        )
+
     results = searcher.search(
         query_string=search_term,
         doc_type="course_info",
@@ -345,6 +354,15 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
                 'start': _format_filter(
                     DateRange(datetime.utcnow() + timedelta(days=30), None)
                 )
+            }
+        )
+
+    exclude = use_field_dictionary.pop('exclude', None)
+    if 'archived' == exclude:
+        filter_dictionary.update(
+            {
+                'start': _format_filter(DateRange(None, datetime.utcnow())),
+                'end': _format_filter(DateRange(datetime.utcnow(), None))
             }
         )
 

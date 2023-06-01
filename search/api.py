@@ -269,7 +269,6 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     if 'archived' == exclude:
         filter_dictionary.update(
             {
-                'start': _format_filter(DateRange(None, datetime.utcnow())),
                 'end': _format_filter(DateRange(datetime.utcnow(), None))
             }
         )

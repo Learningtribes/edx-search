@@ -177,7 +177,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     """
     # We'll ignore the course-enrollemnt informaiton in field and filter
     # dictionary, and use our own logic upon enrollment dates for these
-    sort_args = kwargs.get('sort_type') or 'recommend_policy'
+    sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
     if sort_args == '+display_name':
         sort_args = 'raw_display_name:asc,start:desc'
@@ -188,7 +188,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     elif sort_args == '-start_date':
         sort_args = 'start:desc,raw_display_name:asc'
     else:
-        # `recommend` : Default Sorting Policy
+        # Default Sorting Policy
         # Sorting by `New Course Flag`(later expired date related courses have better positions) +
         # `Current Courses`(course start date) + `Future Courses`(course start date)
         sort_args = 'new_course_flag:desc,new_flag_expired_date:desc,start:asc,raw_display_name:asc'

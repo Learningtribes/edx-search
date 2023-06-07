@@ -686,9 +686,8 @@ class ElasticSearchEngine(SearchEngine):
             if facet_query:
                 body["facets"] = facet_query
 
-        _sort_args_in_body = kwargs.pop('sort_args_in_body', None)
+        _sort_args_in_body = kwargs.pop('sort', None)
         if _sort_args_in_body:
-            kwargs.pop('sort', None)
             body['sort'] = _sort_args_in_body
 
         try:

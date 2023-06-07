@@ -177,22 +177,21 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     """
     # We'll ignore the course-enrollemnt informaiton in field and filter
     # dictionary, and use our own logic upon enrollment dates for these
-    sort_args_in_body = None
     sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
     if sort_args == '+display_name':
-        sort_args = 'raw_display_name:asc,start:desc'
+        sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
     elif sort_args == '-display_name':
-        sort_args = 'raw_display_name:desc,start:desc'
+        sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
     elif sort_args == '+start_date':
-        sort_args = 'start:asc,raw_display_name:asc'
+        sort_args = [{'start': {'order': 'asc'}}, {'raw_display_name': {'order': 'asc'}}]
     elif sort_args == '-start_date':
-        sort_args = 'start:desc,raw_display_name:asc'
+        sort_args = [{'start': {'order': 'desc'}}, {'raw_display_name': {'order': 'asc'}}]
     else:
         # Default Sorting Policy
         # Sorting by `New Course Flag`(later expired date related courses have better positions) +
         # `Current Courses`(course start date) + `Future Courses`(course start date)
-        sort_args_in_body = [
+        sort_args = [
             {'new_course_flag': {'order': 'desc'}},
             {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
             {'start': {'order': 'asc'}},
@@ -292,8 +291,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         filter_dictionary=filter_dictionary,
         exclude_dictionary=exclude_dictionary,
         facet_terms=course_discovery_facets(),
-        sort=sort_args,
-        sort_args_in_body=sort_args_in_body
+        sort=sort_args
     )
 
     results = process_range_data(results)
@@ -305,13 +303,13 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
     sort_args = kwargs.get('sort_type') or '-start_date'
     sort_args = sort_args.lower()
     if sort_args == '+display_name':
-        sort_args = 'raw_title:asc,start:desc'
+        sort_args = [{'raw_title': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
     elif sort_args == '-display_name':
-        sort_args = 'raw_title:desc,start:desc'
+        sort_args = [{'raw_title': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
     elif sort_args == '+start_date':
-        sort_args = 'start:asc,raw_title:asc'
+        sort_args = [{'start': {'order': 'asc'}}, {'raw_title': {'order': 'asc'}}]
     elif sort_args == '-start_date':
-        sort_args = 'start:desc,raw_title:asc'
+        sort_args = [{'start': {'order': 'desc'}}, {'raw_title': {'order': 'asc'}}]
     else:
         log.error('sort_type=[%s] is not allowed', sort_args)
         raise QueryParseError

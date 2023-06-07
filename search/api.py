@@ -177,6 +177,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     """
     # We'll ignore the course-enrollemnt informaiton in field and filter
     # dictionary, and use our own logic upon enrollment dates for these
+    sort_args_in_body = None
     sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
     if sort_args == '+display_name':
@@ -191,7 +192,13 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         # Default Sorting Policy
         # Sorting by `New Course Flag`(later expired date related courses have better positions) +
         # `Current Courses`(course start date) + `Future Courses`(course start date)
-        sort_args = 'new_course_flag:desc,new_flag_expired_date:desc,start:asc,raw_display_name:asc'
+        #sort_args = 'new_course_flag:desc,new_flag_expired_date:desc,start:asc,raw_display_name:asc'
+        sort_args_in_body = [
+            {'new_course_flag': {'order': 'desc'}},
+            {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+            {'start': {'order': 'asc'}},
+            {'raw_display_name': {'order': 'asc'}}
+        ]
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -286,7 +293,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         filter_dictionary=filter_dictionary,
         exclude_dictionary=exclude_dictionary,
         facet_terms=course_discovery_facets(),
-        sort=sort_args
+        sort=sort_args,
+        sort_args_in_body=sort_args_in_body
     )
 
     results = process_range_data(results)

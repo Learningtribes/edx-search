@@ -686,6 +686,11 @@ class ElasticSearchEngine(SearchEngine):
             if facet_query:
                 body["facets"] = facet_query
 
+        _sort_args_in_body = kwargs.pop('sort_args_in_body', None)
+        if _sort_args_in_body:
+            kwargs.pop('sort', None)
+            body['sort'] = _sort_args_in_body
+
         try:
             log.info("search body: %s", body)
             es_response = self._es.search(

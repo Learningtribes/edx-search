@@ -192,7 +192,6 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         # Default Sorting Policy
         # Sorting by `New Course Flag`(later expired date related courses have better positions) +
         # `Current Courses`(course start date) + `Future Courses`(course start date)
-        #sort_args = 'new_course_flag:desc,new_flag_expired_date:desc,start:asc,raw_display_name:asc'
         sort_args_in_body = [
             {'new_course_flag': {'order': 'desc'}},
             {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},

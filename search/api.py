@@ -194,7 +194,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         sort_args = [
             {'new_course_flag': {'order': 'desc'}},
             {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-            {'start': {'order': 'asc'}},
+            {'start': {'order': 'desc'}},
             {'raw_display_name': {'order': 'asc'}}
         ]
 

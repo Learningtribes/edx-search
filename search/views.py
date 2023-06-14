@@ -136,6 +136,9 @@ def do_search(request, course_id=None):
         )
         log.info('%s courses find', results['total'])
 
+        results["page_index"] = page # starts from 0
+        results["total_pages"] = (results["total"] + size - 1) // size # represents how many pages for this result
+
         status_code = 200
 
         # Analytics - log search results before sending to browser
@@ -239,8 +242,8 @@ def course_discovery(request):
             c['data']['non_started'] = not has_started(start)
         log.info('%s courses find', results['total'])
 
-        results["page_number"] = page
-        results["num_of_pages"] = (results["total"] + size - 1) // size
+        results["page_index"] = page # starts from 0
+        results["total_pages"] = (results["total"] + size - 1) // size # represents how many pages for this result
 
         # Analytics - log search results before sending to browser
         track.emit(
@@ -361,8 +364,8 @@ def program_discovery(request):
 
         log.info('%s programs find..', results['total'])
 
-        results["page_number"] = page
-        results["num_of_pages"] = (results["total"] + size - 1) // size
+        results["page_index"] = page # starts from 0
+        results["total_pages"] = (results["total"] + size - 1) // size # represents how many pages for this result
 
         # Analytics - log search results before sending to browser
         track.emit(

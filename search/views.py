@@ -239,6 +239,9 @@ def course_discovery(request):
             c['data']['non_started'] = not has_started(start)
         log.info('%s courses find', results['total'])
 
+        results["page_number"] = page
+        results["num_of_pages"] = (results["total"] + size - 1) // size
+
         # Analytics - log search results before sending to browser
         track.emit(
             'edx.course_discovery.search.results_displayed',
@@ -357,6 +360,9 @@ def program_discovery(request):
             p['data']['non_started'] = not has_started(start)
 
         log.info('%s programs find..', results['total'])
+
+        results["page_number"] = page
+        results["num_of_pages"] = (results["total"] + size - 1) // size
 
         # Analytics - log search results before sending to browser
         track.emit(

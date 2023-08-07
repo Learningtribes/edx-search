@@ -133,12 +133,8 @@ def process_range_data(results):
                 now = datetime.utcnow()
                 new_key = 'future'
 
-                if key < now - timedelta(days=30):
+                if key <= now:
                     new_key = 'current'
-                elif key <= now:
-                    new_key = 'new'
-                elif key < now + timedelta(days=30):
-                    new_key = 'soon'
 
                 new_start_terms[new_key] += value
 
@@ -223,28 +219,13 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         filter_dictionary.update({
             'start':
             _format_filter(
-                DateRange(None,
-                          datetime.utcnow() - timedelta(days=30)))
-        })
-    elif start == 'new':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow() - timedelta(days=30),
-                          datetime.utcnow()))
-        })
-    elif start == 'soon':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow(),
-                          datetime.utcnow() + timedelta(days=30)))
+                DateRange(None, datetime.utcnow()))
         })
     elif start == 'future':
         filter_dictionary.update({
             'start':
             _format_filter(
-                DateRange(datetime.utcnow() + timedelta(days=30), None))
+                DateRange(datetime.utcnow(), None))
         })
 
     status = use_field_dictionary.pop('status', None)
@@ -328,29 +309,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         filter_dictionary.update(
             {
                 'start': _format_filter(
-                    DateRange(
-                        None, datetime.utcnow() - timedelta(days=30)
-                    )
-                )
-            }
-        )
-    elif start == 'new':
-        filter_dictionary.update(
-            {
-                'start': _format_filter(
-                    DateRange(
-                        datetime.utcnow() - timedelta(days=30), datetime.utcnow()
-                    )
-                )
-            }
-        )
-    elif start == 'soon':
-        filter_dictionary.update(
-            {
-                'start': _format_filter(
-                    DateRange(
-                        datetime.utcnow(), datetime.utcnow() + timedelta(days=30)
-                    )
+                    DateRange(None, datetime.utcnow())
                 )
             }
         )
@@ -358,7 +317,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         filter_dictionary.update(
             {
                 'start': _format_filter(
-                    DateRange(datetime.utcnow() + timedelta(days=30), None)
+                    DateRange(datetime.utcnow(), None)
                 )
             }
         )

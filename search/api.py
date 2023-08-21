@@ -187,12 +187,9 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         # Default Sorting Policy
         # Sorting by `New Course Flag`(later expired date related courses have better positions) +
         # `Current Courses`(course start date) + `Future Courses`(course start date)
-        sort_args = [
-            {'new_course_flag': {'order': 'desc'}},
-            {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-            {'start': {'order': 'desc'}},
-            {'raw_display_name': {'order': 'asc'}}
-        ]
+        # Added 2023-08-21:
+        # Separate current and future courses, use the "start" field to populate the default sorting parameter,
+        pass
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -216,12 +213,24 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         })
     start = use_field_dictionary.pop('start', None)
     if start == 'current':
+        sort_args = [
+            {'new_course_flag': {'order': 'desc'}},
+            {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+            {'start': {'order': 'desc'}},
+            {'raw_display_name': {'order': 'asc'}}
+        ]
         filter_dictionary.update({
             'start':
             _format_filter(
                 DateRange(None, datetime.utcnow()))
         })
     elif start == 'future':
+        sort_args = [
+            {'new_course_flag': {'order': 'desc'}},
+            {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+            {'start': {'order': 'asc'}},
+            {'raw_display_name': {'order': 'asc'}}
+        ]
         filter_dictionary.update({
             'start':
             _format_filter(

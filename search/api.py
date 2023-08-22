@@ -117,24 +117,32 @@ def _format_filter(filter, missing_included=True):
     return {'value': filter, 'missing_included': missing_included}
 
 
-def process_range_data(results):
+def process_range_data(results, start=None):
     """Mainly used for processing range datetime data, including `start` property and combined `status` property(`start` and `end`).
     """
+    log.info("##### Search results: %s", results)
+    log.info("##### Start: %s", start)
+
     # For LMS usage
     if "start" in course_discovery_filter_fields():
         start_terms = results.get('facets', {}).get('start', {}).get('terms', {})
         if start_terms:
             new_start_terms = defaultdict(int)
+            log.info("##### new_start_terms: %s", new_start_terms)
+            # Initial new_start_terms = {'current': 0, 'future': 0}
+            new_start_terms['current']
+            new_start_terms['future']
+            log.info("##### new_start_terms: %s", new_start_terms)
 
+            now = datetime.utcnow()
             for key, value in start_terms.items():
                 if not isinstance(key, (str, unicode, bytes, bytearray)):
                     continue
                 key = dateutil.parser.parse(key, ignoretz=True)
-                now = datetime.utcnow()
-                new_key = 'future'
-
-                if key <= now:
-                    new_key = 'current'
+                
+                new_key = 'current'
+                if key > now:
+                    new_key = 'future'
 
                 new_start_terms[new_key] += value
 
@@ -219,11 +227,11 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
             {'start': {'order': 'desc'}},
             {'raw_display_name': {'order': 'asc'}}
         ]
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(None, datetime.utcnow()))
-        })
+        # filter_dictionary.update({
+        #     'start':
+        #     _format_filter(
+        #         DateRange(None, datetime.utcnow()))
+        # })
     elif start == 'future':
         sort_args = [
             {'new_course_flag': {'order': 'desc'}},
@@ -231,11 +239,11 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
             {'start': {'order': 'asc'}},
             {'raw_display_name': {'order': 'asc'}}
         ]
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow(), None))
-        })
+        # filter_dictionary.update({
+        #     'start':
+        #     _format_filter(
+        #         DateRange(datetime.utcnow(), None))
+        # })
 
     status = use_field_dictionary.pop('status', None)
     if status == 'past':
@@ -284,7 +292,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         sort=sort_args
     )
 
-    results = process_range_data(results)
+    results = process_range_data(results, start)
     return results
 
 

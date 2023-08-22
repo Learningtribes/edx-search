@@ -160,6 +160,7 @@ def process_range_data(results, start=None):
                 if (start == 'current' and course_start <= now) or (start == 'future' and course_start > now):
                     courses_filtered.append(c)
             results['results'] = courses_filtered
+            results['total'] = len(courses_filtered)
         log.info("##### Processed results: %s", results)
 
     # For Studio usage
@@ -232,7 +233,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         filter_dictionary.update({
             "enrollment_end": _format_filter(DateRange(datetime.utcnow(), None))
         })
-    start = use_field_dictionary.pop('start', 'current')
+    start = use_field_dictionary.pop('start', None)
     if start == 'current':
         sort_args = [
             {'new_course_flag': {'order': 'desc'}},

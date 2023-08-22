@@ -120,11 +120,11 @@ def _format_filter(filter, missing_included=True):
 def process_range_data(results, start=None):
     """Mainly used for processing range datetime data, including `start` property and combined `status` property(`start` and `end`).
     """
-    log.info("##### Search results: %s", results)
     log.info("##### Start: %s", start)
 
     # For LMS usage
     if "start" in course_discovery_filter_fields():
+        now = datetime.utcnow()
         start_terms = results.get('facets', {}).get('start', {}).get('terms', {})
         if start_terms:
             new_start_terms = defaultdict(int)
@@ -134,7 +134,6 @@ def process_range_data(results, start=None):
             new_start_terms['future']
             log.info("##### new_start_terms: %s", new_start_terms)
 
-            now = datetime.utcnow()
             for key, value in start_terms.items():
                 if not isinstance(key, (str, unicode, bytes, bytearray)):
                     continue
@@ -148,6 +147,20 @@ def process_range_data(results, start=None):
 
             results['facets']['start']['terms'] = new_start_terms
             results['facets']['start']['total'] = sum(new_start_terms.values())
+        log.info("##### Search results: %s", results)
+        if start:
+            courses = results.get('results', [])
+            courses_filtered = []
+            
+            for c in courses:
+                course_start = c.get('data', {}).get('start')
+                if not isinstance(course_start, (str, unicode, bytes, bytearray)):
+                    continue
+                course_start = dateutil.parser.parse(course_start, ignoretz=True)
+                if (start == 'current' and course_start <= now) or (start == 'future' and course_start > now):
+                    courses_filtered.append(c)
+            results['results'] = courses_filtered
+        log.info("##### Processed results: %s", results)
 
     # For Studio usage
     elif "status" in course_discovery_filter_fields():
@@ -219,7 +232,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         filter_dictionary.update({
             "enrollment_end": _format_filter(DateRange(datetime.utcnow(), None))
         })
-    start = use_field_dictionary.pop('start', None)
+    start = use_field_dictionary.pop('start', 'current')
     if start == 'current':
         sort_args = [
             {'new_course_flag': {'order': 'desc'}},

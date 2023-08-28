@@ -194,22 +194,25 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     # We'll ignore the course-enrollemnt informaiton in field and filter
     # dictionary, and use our own logic upon enrollment dates for these
     sort_args = kwargs.get('sort_type') or 'default'
+
+    print(sort_args)
+
     sort_args = sort_args.lower()
-    if sort_args == '+display_name':
-        sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-    elif sort_args == '-display_name':
-        sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-    elif sort_args == '+start_date':
-        sort_args = [{'start': {'order': 'asc'}}, {'raw_display_name': {'order': 'asc'}}]
-    elif sort_args == '-start_date':
-        sort_args = [{'start': {'order': 'desc'}}, {'raw_display_name': {'order': 'asc'}}]
-    else:
-        # Default Sorting Policy
-        # Sorting by `New Course Flag`(later expired date related courses have better positions) +
-        # `Current Courses`(course start date) + `Future Courses`(course start date)
-        # Added 2023-08-21:
-        # Separate current and future courses, use the "start" field to populate the default sorting parameter,
-        pass
+    # if sort_args == '+display_name':
+    #     sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+    # elif sort_args == '-display_name':
+    #     sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+    # elif sort_args == '+start_date':
+    #     sort_args = [{'start': {'order': 'asc'}}, {'raw_display_name': {'order': 'asc'}}]
+    # elif sort_args == '-start_date':
+    #     sort_args = [{'start': {'order': 'desc'}}, {'raw_display_name': {'order': 'asc'}}]
+    # else:
+    #     # Default Sorting Policy
+    #     # Sorting by `New Course Flag`(later expired date related courses have better positions) +
+    #     # `Current Courses`(course start date) + `Future Courses`(course start date)
+    #     # Added 2023-08-21:
+    #     # Separate current and future courses, use the "start" field to populate the default sorting parameter,
+    #     pass
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -233,29 +236,63 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         })
     start = use_field_dictionary.pop('start', None)
     if start == 'current':
-        sort_args = [
-            {'new_course_flag': {'order': 'desc'}},
-            {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-            {'start': {'order': 'desc'}},
-            {'raw_display_name': {'order': 'asc'}}
-        ]
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+start_date':
+            sort_args = [{'start': {'order': 'asc'}}, {'raw_display_name': {'order': 'asc'}}]
+        elif sort_args == '-start_date':
+            sort_args = [{'start': {'order': 'desc'}}, {'raw_display_name': {'order': 'asc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'desc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
         # filter_dictionary.update({
         #     'start':
         #     _format_filter(
         #         DateRange(None, datetime.utcnow()))
         # })
     elif start == 'future':
-        sort_args = [
-            {'new_course_flag': {'order': 'desc'}},
-            {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-            {'start': {'order': 'asc'}},
-            {'raw_display_name': {'order': 'asc'}}
-        ]
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+start_date':
+            sort_args = [{'start': {'order': 'asc'}}, {'raw_display_name': {'order': 'asc'}}]
+        elif sort_args == '-start_date':
+            sort_args = [{'start': {'order': 'desc'}}, {'raw_display_name': {'order': 'asc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'asc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
         # filter_dictionary.update({
         #     'start':
         #     _format_filter(
         #         DateRange(datetime.utcnow(), None))
         # })
+    else:
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+start_date':
+            sort_args = [{'start': {'order': 'asc'}}, {'raw_display_name': {'order': 'asc'}}]
+        elif sort_args == '-start_date':
+            sort_args = [{'start': {'order': 'desc'}}, {'raw_display_name': {'order': 'asc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'desc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
 
     status = use_field_dictionary.pop('status', None)
     if status == 'past':

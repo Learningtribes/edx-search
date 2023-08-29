@@ -226,7 +226,13 @@ def course_discovery(request):
                 "page_number": page,
             }
         )
-
+        log.info('search_term: %s', search_term)
+        log.info('size: %s', size)
+        log.info('from_: %s', from_)
+        log.info('field_dictionary: %s', field_dictionary)
+        log.info('user: %s', request.user)
+        log.info('allow_enrollment_end_filter: %s', True)
+        log.info('sort_type: %s', request.POST.get('sort_type'))
         results = course_discovery_search(
             search_term=search_term,
             size=size,

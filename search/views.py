@@ -22,10 +22,15 @@ from .api import (
     program_discovery_filter_fields
 )
 from .initializer import SearchInitializer
+from lms.djangoapps.metrics.metrics import MetricLogger
 
 # log appears to be standard name used for logger
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+search_parameters_counter = MetricLogger(
+    name='search_parameters_counter',
+    description='This log file registers number of searches in csv format.',
+    file_format='csv')
 
 def _process_pagination_values(request):
     """ process pagination requests from request parameter """
@@ -250,6 +255,23 @@ def course_discovery(request):
             }
         )
 
+        # Our filter keys
+        filter_keys = ['start', 'vendor', 'course_category', 'language', 'course_mandatory_enabled']
+
+        # Fills a list according to the filters used by the user
+        filters = [key for key in filter_keys if request.POST.getlist("{}[]".format(key))]
+
+        metrics_data = {
+            "search_term": search_term,
+            "filters": filters,
+            "results": results["total"]
+        }
+
+        # Write data in CSV file
+        search_parameters_counter.log("{};{};{};{};{}".format(
+            request.user.id, request.user.username, request.user.profile.org, metrics_data, datetime.now(UTC)
+            ))
+        
         status_code = 200
 
     except ValueError as invalid_err:

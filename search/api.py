@@ -299,7 +299,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
 
 def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """Fetch programs data from ElasticSearch."""
-    sort_args = kwargs.get('sort_type') or '-start_date'
+    sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
     if sort_args == '+display_name':
         sort_args = [{'raw_title': {'order': 'asc'}}, {'start': {'order': 'desc'}}]

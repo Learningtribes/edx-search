@@ -14,7 +14,7 @@ from .utils import DateRange
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # Default filters that we support, override using COURSE_DISCOVERY_FILTERS setting if desired
-DEFAULT_FILTER_FIELDS = ["org", "modes", "language", "languages"]       # Need to remove "language" in the future
+DEFAULT_FILTER_FIELDS = ['org', 'modes', 'languages']
 
 # Default filters that we support, override using PROGRAM_DISCOVERY_FILTERS setting if desired
 DEFAULT_PROGRAM_FILTER_FIELDS = ["language"]

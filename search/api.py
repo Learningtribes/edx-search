@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 DEFAULT_FILTER_FIELDS = ['org', 'modes', 'languages']
 
 # Default filters that we support, override using PROGRAM_DISCOVERY_FILTERS setting if desired
-DEFAULT_PROGRAM_FILTER_FIELDS = ["language"]
+DEFAULT_PROGRAM_FILTER_FIELDS = ['languages']
 
 #from xmodule.course_module import CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 CATALOG_VISIBILITY_CATALOG_AND_ABOUT = "both"

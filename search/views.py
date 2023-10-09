@@ -134,7 +134,10 @@ def do_search(request, course_id=None):
             from_=from_,
             course_id=course_id
         )
-        log.info('%s courses find', results['total'])
+        log.info('%s courses found.', results['total'])
+
+        results["page_index"] = page # starts from 0
+        results["total_pages"] = (results["total"] + size - 1) // size # represents how many pages for this result
 
         status_code = 200
 
@@ -237,7 +240,10 @@ def course_discovery(request):
             start = c['data']['start'].replace("+00:00", "Z")
             start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
             c['data']['non_started'] = not has_started(start)
-        log.info('%s courses find', results['total'])
+        log.info('%s courses found.', results['total'])
+
+        results["page_index"] = page # starts from 0
+        results["total_pages"] = (results["total"] + size - 1) // size # represents how many pages for this result
 
         # Analytics - log search results before sending to browser
         track.emit(
@@ -356,7 +362,10 @@ def program_discovery(request):
             start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
             p['data']['non_started'] = not has_started(start)
 
-        log.info('%s programs find..', results['total'])
+        log.info('%s programs found.', results['total'])
+
+        results["page_index"] = page # starts from 0
+        results["total_pages"] = (results["total"] + size - 1) // size # represents how many pages for this result
 
         # Analytics - log search results before sending to browser
         track.emit(

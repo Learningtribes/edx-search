@@ -122,23 +122,22 @@ def process_range_data(results):
     """
     # For LMS usage
     if "start" in course_discovery_filter_fields():
+        now = datetime.utcnow()
         start_terms = results.get('facets', {}).get('start', {}).get('terms', {})
         if start_terms:
             new_start_terms = defaultdict(int)
+            # Initial new_start_terms = {'current': 0, 'future': 0}
+            new_start_terms['current']
+            new_start_terms['future']
 
             for key, value in start_terms.items():
                 if not isinstance(key, (str, unicode, bytes, bytearray)):
                     continue
                 key = dateutil.parser.parse(key, ignoretz=True)
-                now = datetime.utcnow()
-                new_key = 'future'
-
-                if key < now - timedelta(days=30):
-                    new_key = 'current'
-                elif key <= now:
-                    new_key = 'new'
-                elif key < now + timedelta(days=30):
-                    new_key = 'soon'
+                
+                new_key = 'current'
+                if key > now:
+                    new_key = 'future'
 
                 new_start_terms[new_key] += value
 
@@ -179,24 +178,6 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     # dictionary, and use our own logic upon enrollment dates for these
     sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
-    if sort_args == '+display_name':
-        sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-    elif sort_args == '-display_name':
-        sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-    elif sort_args == '+start_date':
-        sort_args = [{'start': {'order': 'asc'}}, {'raw_display_name': {'order': 'asc'}}]
-    elif sort_args == '-start_date':
-        sort_args = [{'start': {'order': 'desc'}}, {'raw_display_name': {'order': 'asc'}}]
-    else:
-        # Default Sorting Policy
-        # Sorting by `New Course Flag`(later expired date related courses have better positions) +
-        # `Current Courses`(course start date) + `Future Courses`(course start date)
-        sort_args = [
-            {'new_course_flag': {'order': 'desc'}},
-            {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-            {'start': {'order': 'desc'}},
-            {'raw_display_name': {'order': 'asc'}}
-        ]
 
     use_search_fields = ["org"]
     if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
@@ -220,32 +201,51 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         })
     start = use_field_dictionary.pop('start', None)
     if start == 'current':
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'desc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
         filter_dictionary.update({
             'start':
             _format_filter(
-                DateRange(None,
-                          datetime.utcnow() - timedelta(days=30)))
-        })
-    elif start == 'new':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow() - timedelta(days=30),
-                          datetime.utcnow()))
-        })
-    elif start == 'soon':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow(),
-                          datetime.utcnow() + timedelta(days=30)))
+                DateRange(None, datetime.utcnow()))
         })
     elif start == 'future':
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'asc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
         filter_dictionary.update({
             'start':
             _format_filter(
-                DateRange(datetime.utcnow() + timedelta(days=30), None))
+                DateRange(datetime.utcnow(), None))
         })
+    else:
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'desc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
 
     status = use_field_dictionary.pop('status', None)
     if status == 'past':
@@ -294,25 +294,19 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         sort=sort_args
     )
 
-    results = process_range_data(results)
-    return results
+    return process_range_data(results)
 
 
 def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """Fetch programs data from ElasticSearch."""
-    sort_args = kwargs.get('sort_type') or '-start_date'
+    sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
     if sort_args == '+display_name':
         sort_args = [{'raw_title': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
     elif sort_args == '-display_name':
         sort_args = [{'raw_title': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-    elif sort_args == '+start_date':
-        sort_args = [{'start': {'order': 'asc'}}, {'raw_title': {'order': 'asc'}}]
-    elif sort_args == '-start_date':
-        sort_args = [{'start': {'order': 'desc'}}, {'raw_title': {'order': 'asc'}}]
     else:
-        log.error('sort_type=[%s] is not allowed', sort_args)
-        raise QueryParseError
+        sort_args = [{'raw_title': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
 
     searcher = SearchEngine.get_search_engine(getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'))
     if not searcher:
@@ -328,29 +322,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         filter_dictionary.update(
             {
                 'start': _format_filter(
-                    DateRange(
-                        None, datetime.utcnow() - timedelta(days=30)
-                    )
-                )
-            }
-        )
-    elif start == 'new':
-        filter_dictionary.update(
-            {
-                'start': _format_filter(
-                    DateRange(
-                        datetime.utcnow() - timedelta(days=30), datetime.utcnow()
-                    )
-                )
-            }
-        )
-    elif start == 'soon':
-        filter_dictionary.update(
-            {
-                'start': _format_filter(
-                    DateRange(
-                        datetime.utcnow(), datetime.utcnow() + timedelta(days=30)
-                    )
+                    DateRange(None, datetime.utcnow())
                 )
             }
         )
@@ -358,7 +330,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         filter_dictionary.update(
             {
                 'start': _format_filter(
-                    DateRange(datetime.utcnow() + timedelta(days=30), None)
+                    DateRange(datetime.utcnow(), None)
                 )
             }
         )

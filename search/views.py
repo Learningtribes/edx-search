@@ -259,7 +259,7 @@ def course_discovery(request):
         filter_keys = ['start', 'vendor', 'course_category', 'language', 'course_mandatory_enabled']
 
         # Fills a list according to the filters used by the user
-        filters = [key for key in filter_keys if request.POST.getlist("{}[]".format(key))]
+        filters = [key for key in filter_keys if request.POST.getlist(key)]
 
         metrics_data = {
             "search_term": search_term,

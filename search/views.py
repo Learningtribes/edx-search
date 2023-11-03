@@ -280,7 +280,7 @@ def course_discovery(request):
             err
         )
 
-    search_parameters_log(request, filter_type="courses")
+    search_parameters_log(request, "courses", results)
 
     return HttpResponse(
         json.dumps(results, cls=DjangoJSONEncoder),
@@ -405,7 +405,7 @@ def program_discovery(request):
             err
         )
 
-    search_parameters_log(request, filter_type="programs")
+    search_parameters_log(request, "programs", results)
 
     return HttpResponse(
         json.dumps(results, cls=DjangoJSONEncoder),

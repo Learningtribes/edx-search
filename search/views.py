@@ -22,7 +22,7 @@ from .api import (
     program_discovery_filter_fields
 )
 from .initializer import SearchInitializer
-from lms.djangoapps.metrics.metrics import search_parameters_log
+from lms.djangoapps.metrics.metrics import catalog_search_log
 
 # log appears to be standard name used for logger
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -280,7 +280,7 @@ def course_discovery(request):
             err
         )
 
-    search_parameters_log(request, "courses", results)
+    catalog_search_log(request, "courses", results)
 
     return HttpResponse(
         json.dumps(results, cls=DjangoJSONEncoder),
@@ -405,7 +405,7 @@ def program_discovery(request):
             err
         )
 
-    search_parameters_log(request, "programs", results)
+    catalog_search_log(request, "programs", results)
 
     return HttpResponse(
         json.dumps(results, cls=DjangoJSONEncoder),

@@ -22,10 +22,10 @@ from .api import (
     program_discovery_filter_fields
 )
 from .initializer import SearchInitializer
+from lms.djangoapps.metrics.metrics import catalog_search_log
 
 # log appears to be standard name used for logger
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
-
 
 def _process_pagination_values(request):
     """ process pagination requests from request parameter """
@@ -73,7 +73,6 @@ def _course_process_field_values(request):
 
 def _programs_process_field_values(request):
     return _process_field_values(request, program_discovery_filter_fields())
-
 
 @require_POST
 def do_search(request, course_id=None):
@@ -255,7 +254,7 @@ def course_discovery(request):
                 "results_count": results["total"],
             }
         )
-
+        
         status_code = 200
 
     except ValueError as invalid_err:
@@ -280,6 +279,8 @@ def course_discovery(request):
             request.user.id,
             err
         )
+
+    catalog_search_log(request, "courses", results)
 
     return HttpResponse(
         json.dumps(results, cls=DjangoJSONEncoder),
@@ -403,6 +404,8 @@ def program_discovery(request):
             request.user.id,
             err
         )
+
+    catalog_search_log(request, "programs", results)
 
     return HttpResponse(
         json.dumps(results, cls=DjangoJSONEncoder),

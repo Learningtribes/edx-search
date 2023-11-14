@@ -229,7 +229,7 @@ def course_discovery(request):
         )
 
         if search_term and is_vulnerable_text(search_term):
-            raise ValueError('The input of search string is vulnerable.')
+            raise SyntaxError(_('The input of {place_holder} is vulnerable').format(place_holder=_('Filter')))
 
         results = course_discovery_search(
             search_term=search_term,
@@ -261,6 +261,11 @@ def course_discovery(request):
         )
         
         status_code = 200
+
+    except SyntaxError as syntax_err:
+        results = {
+            "illegal_search_string": unicode(syntax_err)
+        }
 
     except ValueError as invalid_err:
         results = {
@@ -341,6 +346,9 @@ def program_discovery(request):
     search_term = request.POST.get('search_string', None)
     search_term = search_term if search_term else None
 
+    if search_term and is_vulnerable_text(search_term):
+        raise SyntaxError(_('The input of {place_holder} is vulnerable').format(place_holder=_('Filter')))
+
     try:
         size, from_, page = _process_pagination_values(request)
         field_dictionary = _programs_process_field_values(request)
@@ -385,6 +393,11 @@ def program_discovery(request):
         )
 
         status_code = 200
+
+    except SyntaxError as syntax_err:
+        results = {
+            "illegal_search_string": unicode(syntax_err)
+        }
 
     except ValueError as invalid_err:
         results = {

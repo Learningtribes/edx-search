@@ -23,6 +23,8 @@ from .api import (
 )
 from .initializer import SearchInitializer
 from lms.djangoapps.metrics.metrics import catalog_search_log
+from util.string_utils import is_vulnerable_text
+
 
 # log appears to be standard name used for logger
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -225,6 +227,9 @@ def course_discovery(request):
                 "page_number": page,
             }
         )
+
+        if search_term and is_vulnerable_text(search_term):
+            raise ValueError('The input of search string is vulnerable.')
 
         results = course_discovery_search(
             search_term=search_term,

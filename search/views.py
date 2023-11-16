@@ -229,7 +229,12 @@ def course_discovery(request):
         )
 
         if search_term and is_vulnerable_text(search_term):
-            raise SyntaxError(_('The input of {place_holder} is vulnerable').format(place_holder=_('Filter')))
+            raise SyntaxError(
+                r'{field} {field_name}: {message}'.format(
+                    field=_('Field'), field_name=_('Search'),
+                    message=_('This value is invalid.')
+                )
+            )
 
         results = course_discovery_search(
             search_term=search_term,
@@ -351,7 +356,12 @@ def program_discovery(request):
         field_dictionary = _programs_process_field_values(request)
 
         if search_term and is_vulnerable_text(search_term):
-            raise SyntaxError(_('The input of {place_holder} is vulnerable').format(place_holder=_('Filter')))
+            raise SyntaxError(
+                r'{field} {field_name}: {message}'.format(
+                    field=_('Field'), field_name=_('Search'),
+                    message=_('This value is invalid.')
+                )
+            )
 
         # Analytics - log search request
         track.emit(

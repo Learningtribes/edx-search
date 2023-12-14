@@ -23,6 +23,8 @@ from .api import (
 )
 from .initializer import SearchInitializer
 from lms.djangoapps.metrics.metrics import catalog_search_log
+from util.string_utils import is_vulnerable_text
+
 
 # log appears to be standard name used for logger
 log = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -226,6 +228,14 @@ def course_discovery(request):
             }
         )
 
+        if search_term and is_vulnerable_text(search_term):
+            raise SyntaxError(
+                r'{field} {field_name}: {message}'.format(
+                    field=_('Field'), field_name=_('Search'),
+                    message=_('This value is invalid.')
+                )
+            )
+
         results = course_discovery_search(
             search_term=search_term,
             size=size,
@@ -256,6 +266,11 @@ def course_discovery(request):
         )
         
         status_code = 200
+
+    except SyntaxError as syntax_err:
+        results = {
+            "illegal_search_string": unicode(syntax_err)
+        }
 
     except ValueError as invalid_err:
         results = {
@@ -340,6 +355,14 @@ def program_discovery(request):
         size, from_, page = _process_pagination_values(request)
         field_dictionary = _programs_process_field_values(request)
 
+        if search_term and is_vulnerable_text(search_term):
+            raise SyntaxError(
+                r'{field} {field_name}: {message}'.format(
+                    field=_('Field'), field_name=_('Search'),
+                    message=_('This value is invalid.')
+                )
+            )
+
         # Analytics - log search request
         track.emit(
             'edx.course_discovery.search.initiated',
@@ -380,6 +403,11 @@ def program_discovery(request):
         )
 
         status_code = 200
+
+    except SyntaxError as syntax_err:
+        results = {
+            "illegal_search_string": unicode(syntax_err)
+        }
 
     except ValueError as invalid_err:
         results = {

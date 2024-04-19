@@ -269,6 +269,11 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
                 DateRange(datetime.utcnow(), None))
         })
 
+    course_category = use_field_dictionary.pop('course_category', None)
+    if course_category:
+        filter_dictionary.update({
+        })
+
     if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
         use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
 

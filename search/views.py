@@ -60,10 +60,9 @@ def _process_field_values(request, allowed_fields):
         elif field_key in allowed_fields:
             filter_values = request.POST[field_key]
 
-            if field_key not in ['vendor', 'course_category']:
-                if ',' in filter_values:
-                    field_values[field_key] = filter_values.split(',')
-                    continue
+            if field_key not in ['vendor', 'course_category'] and ',' in filter_values:
+                field_values[field_key] = filter_values.split(',')
+                continue
 
             field_values[field_key] = filter_values
 

@@ -180,7 +180,9 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     sort_args = sort_args.lower()
 
     use_search_fields = ["org"]
-    if kwargs.get('include_course_filter', False) and kwargs.get('user', None) and not kwargs['user'].is_staff:
+    # Apply course filter by specified `user role`:
+    # Developer / Platform Super Admin / Platform Admin / Course Admin / Course Staff...
+    if kwargs.get('include_course_filter', False) and 'user' in kwargs:
         use_search_fields.append("course")
     (search_fields, _, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(**kwargs)
     use_field_dictionary = {}

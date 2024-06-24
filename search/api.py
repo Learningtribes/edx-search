@@ -241,6 +241,14 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
             sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
         elif sort_args == '-display_name':
             sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+created':
+            sort_args = [{'created': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-created':
+            sort_args = [{'created': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+modified':
+            sort_args = [{'modified': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-modified':
+            sort_args = [{'modified': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
         else:
             sort_args = [
                 {'new_course_flag': {'order': 'desc'}},

@@ -621,16 +621,19 @@ class ElasticSearchEngine(SearchEngine):
 
         elastic_queries = []
         elastic_filters = []
-        content_fields = ["content.display_name", "content.title", "content.number"]
+        content_fields = ["content.display_name", "content.title", "content.course_id"]
 
         # We have a query string, search all fields for matching text within the "content" node
         if query_string:
+            # We have to replace reserved characters with '\\' titled string as follow :
+            safe_query_string = ''.join(r'\\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
+
             for field in content_fields:
                 elastic_queries.append({
                     "match": {
                         field: {
-                            "query": query_string.encode('utf-8').translate(None, RESERVED_CHARACTERS),
-                            "fuzziness": 1 if field != "content.number" else 0,
+                            "query": safe_query_string,
+                            "fuzziness": 1 if field != "content.course_id" else 0,
                             "operator": "AND",
                             "analyzer": "standard"
                         }

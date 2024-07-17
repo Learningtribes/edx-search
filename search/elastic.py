@@ -626,7 +626,8 @@ class ElasticSearchEngine(SearchEngine):
         # We have a query string, search all fields for matching text within the "content" node
         if query_string:
             # We have to replace reserved characters with '\\' titled string as follow :
-            safe_query_string = ''.join(r'\\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
+            # E.g. For a string including a plus sign (+), we escape it like this: \+
+            safe_query_string = ''.join(r'\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
 
             for field in content_fields:
                 elastic_queries.append({

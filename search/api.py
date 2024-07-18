@@ -88,10 +88,11 @@ def perform_search(
     if not searcher:
         raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
 
-    filter_dictionary = {key:_format_filter(value) for key, value in filter_dictionary.items()}
+    search_terms = [] if search_term in (None, '') else [search_term]
+    filter_dictionary = {key: _format_filter(value) for key, value in filter_dictionary.items()}
 
     results = searcher.search_string(
-        search_term,
+        search_terms,
         field_dictionary=field_dictionary,
         filter_dictionary=filter_dictionary,
         exclude_dictionary=exclude_dictionary,
@@ -170,7 +171,7 @@ def process_range_data(results):
     return results
 
 
-def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
+def course_discovery_search(search_terms=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """
     Course Discovery activities against the search engine index of course details
     """
@@ -295,7 +296,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
         )
 
     results = searcher.search(
-        query_string=search_term,
+        query_strings=search_terms,
         doc_type="course_info",
         size=size,
         from_=from_,
@@ -311,7 +312,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     return process_range_data(results)
 
 
-def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
+def programs_discovery_search(search_terms=None, size=20, from_=0, field_dictionary=None, **kwargs):
     """Fetch programs data from ElasticSearch."""
     sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
@@ -358,7 +359,7 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
         )
 
     results = searcher.search(
-        query_string=search_term,
+        query_strings=search_terms,
         size=size,
         from_=from_,
         field_dictionary=use_field_dictionary,

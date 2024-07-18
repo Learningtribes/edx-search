@@ -514,7 +514,7 @@ class ElasticSearchEngine(SearchEngine):
     #       optional argument then...'. Reasoning goes back to its easier to read
     #       the (somewhat linear) flow rather than to jump up to other locations in code
     def search(self,
-               query_string=None,
+               query_strings=None,
                field_dictionary=None,
                filter_dictionary=None,
                exclude_dictionary=None,
@@ -527,7 +527,7 @@ class ElasticSearchEngine(SearchEngine):
         Implements call to search the index for the desired content.
 
         Args:
-            query_string (str): the string of values upon which to search within the
+            query_strings (list): the string list of values upon which to search within the
             content of the objects within the index
 
             field_dictionary (dict): dictionary of values which _must_ exist and
@@ -616,30 +616,39 @@ class ElasticSearchEngine(SearchEngine):
                 }
             )
         """
-
-        log.debug("searching index with %s", query_string)
+        query_strings = [query_strings] if isinstance(query_strings, (str, unicode)) else query_strings
+        log.debug('searching index with terms [{}]', ','.join(query_strings))
 
         elastic_queries = []
         elastic_filters = []
         content_fields = ["content.display_name", "content.title", "content.course_id"]
+        # We have to replace reserved characters with '\\' titled string as follow :
+        # E.g. For a string including a plus sign (+), we escape it like this: \+
+        safe_query_strings = [
+            ''.join(r'\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
+            for query_string in query_strings
+        ]
 
         # We have a query string, search all fields for matching text within the "content" node
-        if query_string:
-            # We have to replace reserved characters with '\\' titled string as follow :
-            # E.g. For a string including a plus sign (+), we escape it like this: \+
-            safe_query_string = ''.join(r'\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
-
-            for field in content_fields:
-                elastic_queries.append({
-                    "match": {
-                        field: {
-                            "query": safe_query_string,
-                            "fuzziness": 1 if field != "content.course_id" else 0,
-                            "operator": "AND",
-                            "analyzer": "standard"
+        for field in content_fields:
+            elastic_queries.append({
+                "bool": {
+                    "must": [
+                        {
+                            'match': {
+                                field: {
+                                    "query": _safe_query_string,
+                                    "fuzziness": 1 if field != "content.course_id" else 0,
+                                    "operator": "AND",
+                                    "analyzer": "standard"
+                                }
+                            }
                         }
-                    }
-                })
+                        for _safe_query_string in safe_query_strings
+                    ]
+                }
+            })
+
         if field_dictionary:
             if use_field_match:
                 elastic_queries.extend(_process_field_queries(field_dictionary))

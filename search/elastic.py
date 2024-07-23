@@ -616,7 +616,7 @@ class ElasticSearchEngine(SearchEngine):
                 }
             )
         """
-        query_strings = [] if query_strings is None else query_strings
+        query_strings = [] if not query_strings else query_strings
         query_strings = [query_strings] if isinstance(query_strings, (str, unicode)) else query_strings
         log.debug('searching index with terms [{}]', ','.join(query_strings))
 
@@ -631,24 +631,25 @@ class ElasticSearchEngine(SearchEngine):
         ]
 
         # We have a query string, search all fields for matching text within the "content" node
-        for field in content_fields:
-            elastic_queries.append({
-                "bool": {
-                    "must": [
-                        {
-                            'match': {
-                                field: {
-                                    "query": _safe_query_string,
-                                    "fuzziness": 1 if field != "content.course_id" else 0,
-                                    "operator": "AND",
-                                    "analyzer": "standard"
+        if query_strings:
+            for field in content_fields:
+                elastic_queries.append({
+                    "bool": {
+                        "must": [
+                            {
+                                'match': {
+                                    field: {
+                                        "query": _safe_query_string,
+                                        "fuzziness": 1 if field != "content.course_id" else 0,
+                                        "operator": "AND",
+                                        "analyzer": "standard"
+                                    }
                                 }
                             }
-                        }
-                        for _safe_query_string in safe_query_strings
-                    ]
-                }
-            })
+                            for _safe_query_string in safe_query_strings
+                        ]
+                    }
+                })
 
         if field_dictionary:
             if use_field_match:

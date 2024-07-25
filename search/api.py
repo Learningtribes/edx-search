@@ -90,6 +90,8 @@ def perform_search(
 
     filter_dictionary = {key:_format_filter(value) for key, value in filter_dictionary.items()}
 
+    filter_dictionary["course_status"] = _format_filter("released")
+
     results = searcher.search_string(
         search_term,
         field_dictionary=field_dictionary,
@@ -281,6 +283,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
                 'end': _format_filter(DateRange(datetime.utcnow(), None))
             }
         )
+    filter_dictionary["course_status"] = _format_filter("released")
 
     results = searcher.search(
         query_string=search_term,
@@ -344,6 +347,8 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
                 'end': _format_filter(DateRange(datetime.utcnow(), None))
             }
         )
+
+    filter_dictionary["course_status"] = _format_filter("released")
 
     results = searcher.search(
         query_string=search_term,

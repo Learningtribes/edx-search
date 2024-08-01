@@ -75,7 +75,8 @@ def perform_search(
         user=None,
         size=10,
         from_=0,
-        course_id=None):
+        course_id=None,
+        only_released_courses=True):
     """ Call the search engine with the appropriate parameters """
     # field_, filter_ and exclude_dictionary(s) can be overridden by calling application
     # field_dictionary includes course if course_id provided
@@ -90,7 +91,8 @@ def perform_search(
 
     filter_dictionary = {key:_format_filter(value) for key, value in filter_dictionary.items()}
 
-    filter_dictionary["course_status"] = _format_filter("released")
+    if only_released_courses:
+        filter_dictionary["course_status"] = _format_filter("released")
 
     results = searcher.search_string(
         search_term,
@@ -172,7 +174,7 @@ def process_range_data(results):
     return results
 
 
-def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
+def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, only_released_courses=True, **kwargs):
     """
     Course Discovery activities against the search engine index of course details
     """
@@ -283,7 +285,8 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
                 'end': _format_filter(DateRange(datetime.utcnow(), None))
             }
         )
-    filter_dictionary["course_status"] = _format_filter("released")
+    if only_released_courses:
+        filter_dictionary["course_status"] = _format_filter("released")
 
     results = searcher.search(
         query_string=search_term,
@@ -302,7 +305,7 @@ def course_discovery_search(search_term=None, size=20, from_=0, field_dictionary
     return process_range_data(results)
 
 
-def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, **kwargs):
+def programs_discovery_search(search_term=None, size=20, from_=0, field_dictionary=None, only_released_courses=True, **kwargs):
     """Fetch programs data from ElasticSearch."""
     sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
@@ -348,7 +351,8 @@ def programs_discovery_search(search_term=None, size=20, from_=0, field_dictiona
             }
         )
 
-    filter_dictionary["course_status"] = _format_filter("released")
+    if only_released_courses:
+        filter_dictionary["course_status"] = _format_filter("released")
 
     results = searcher.search(
         query_string=search_term,

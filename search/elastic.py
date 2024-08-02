@@ -618,7 +618,6 @@ class ElasticSearchEngine(SearchEngine):
         """
         query_strings = [] if not query_strings else query_strings
         query_strings = [query_strings] if isinstance(query_strings, (str, unicode)) else query_strings
-        log.debug('searching index with terms [{}]', ','.join(query_strings))
 
         elastic_queries = []
         elastic_filters = []

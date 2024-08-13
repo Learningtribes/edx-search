@@ -44,6 +44,7 @@ def _translate_hits(es_response):
             "terms": terms,
             "total": result["total"],
             "other": result["other"],
+            "missing": result["missing"]
         }
 
     results = [translate_result(hit) for hit in es_response["hits"]["hits"]]

@@ -239,7 +239,7 @@ def course_discovery(request):
                 )
             )
 
-        search_terms = set(search_term.split(' '))
+        search_terms = set(search_term.split(' ')) if search_term else None
 
         results = course_discovery_search(
             search_terms=search_terms,

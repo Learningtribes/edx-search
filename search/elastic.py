@@ -619,6 +619,11 @@ class ElasticSearchEngine(SearchEngine):
         query_strings = [] if not query_strings else query_strings
         query_strings = [query_strings] if isinstance(query_strings, (str, unicode)) else query_strings
 
+        checked_query_strings = []
+        for query_string in query_strings:
+            if len(query_string) > 1:
+                checked_query_strings.append(query_string)
+
         elastic_queries = []
         elastic_filters = []
         content_fields = ["content.display_name", "content.title", "content.course_id"]
@@ -626,11 +631,11 @@ class ElasticSearchEngine(SearchEngine):
         # E.g. For a string including a plus sign (+), we escape it like this: \+
         safe_query_strings = [
             ''.join(r'\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
-            for query_string in query_strings
+            for query_string in checked_query_strings
         ]
 
         # We have a query string, search all fields for matching text within the "content" node
-        if query_strings:
+        if checked_query_strings:
             for field in content_fields:
                 elastic_queries.append({
                     "bool": {
@@ -639,7 +644,7 @@ class ElasticSearchEngine(SearchEngine):
                                 'match': {
                                     field: {
                                         "query": _safe_query_string,
-                                        "fuzziness": 1 if field != "content.course_id" else 0,
+                                        "fuzziness":0,
                                         "operator": "AND",
                                         "analyzer": "standard"
                                     }

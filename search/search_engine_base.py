@@ -24,7 +24,7 @@ class SearchEngine(object):
         raise NotImplementedError
 
     def search(self,
-               query_string=None,
+               query_strings=None,
                field_dictionary=None,
                filter_dictionary=None,
                exclude_dictionary=None,
@@ -33,9 +33,9 @@ class SearchEngine(object):
         """ This operation is called to search for matching documents within the search index """
         raise NotImplementedError
 
-    def search_string(self, query_string, **kwargs):
+    def search_string(self, query_strings, **kwargs):
         """ Helper function when primary search is for a query string """
-        return self.search(query_string=query_string, **kwargs)
+        return self.search(query_strings=query_strings, **kwargs)
 
     def search_fields(self, field_dictionary, **kwargs):
         """ Helper function when primary search is for a set of matching fields """

@@ -239,8 +239,10 @@ def course_discovery(request):
                 )
             )
 
+        search_terms = set(search_term.split(' ')) if search_term else None
+
         results = course_discovery_search(
-            search_term=search_term,
+            search_terms=search_terms,
             size=size,
             from_=from_,
             field_dictionary=field_dictionary,

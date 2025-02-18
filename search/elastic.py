@@ -716,8 +716,8 @@ class ElasticSearchEngine(SearchEngine):
         # Get `doc_count` from ES ( without filters )
         # E.g: if we query courses with lots of conditions, then we still return total count of
         # courses with this Flag `ga_total`
-        _ga_total = kwargs.pop('ga_total', None)
-        if _ga_total:
+        ga_total = kwargs.pop('ga_total', None)
+        if ga_total:
             body['aggs'] = {
                 "total_records": {
                     "global": {}

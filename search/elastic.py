@@ -709,6 +709,16 @@ class ElasticSearchEngine(SearchEngine):
         _sort_args_in_body = kwargs.pop('sort', None)
         if _sort_args_in_body:
             body['sort'] = _sort_args_in_body
+        # Get `doc_count` from ES ( without filters )
+        # E.g: if we query courses with lots of conditions, then we still return total count of
+        # courses with this Flag `ga_total`
+        _ga_total = kwargs.pop('ga_total', None)
+        if _ga_total:
+            body['aggs'] = {
+                "total_records": {
+                    "global": {}
+                }
+            }
 
         try:
             log.info("search body: %s", body)

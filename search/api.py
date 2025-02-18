@@ -312,7 +312,8 @@ def course_discovery_search(search_terms=None, size=20, from_=0, field_dictionar
         filter_dictionary=filter_dictionary,
         exclude_dictionary=exclude_dictionary,
         facet_terms=course_discovery_facets(),
-        sort=sort_args
+        sort=sort_args,
+        ga_total=kwargs.pop('ga_total', False)
     )
 
     return process_range_data(results)

@@ -58,6 +58,10 @@ def _translate_hits(es_response):
     if "facets" in es_response:
         response["facets"] = {facet: translate_facet(es_response["facets"][facet]) for facet in es_response["facets"]}
 
+    if "aggregations" in es_response and "total_records" in es_response["aggregations"]:
+        # Total number without Filters
+        response["doc_count"] = es_response["aggregations"]["total_records"]["doc_count"]
+
     return response
 
 

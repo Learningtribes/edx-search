@@ -726,11 +726,12 @@ class ElasticSearchEngine(SearchEngine):
                     "global": {}
                 }
             }
-            if field_dictionary.get("course", None):
+            ### For low level Roles:
+            if field_dictionary.get("course", None):    # Courses
                 body["aggs"]["total_records"]["aggs"] = {
                     "filtered_id": {"filter": {"terms": {"_id": field_dictionary["course"]}}}
                 }
-            if field_dictionary.get("uuid", None):
+            if field_dictionary.get("uuid", None):      # Learning Paths
                 body["aggs"]["total_records"]["aggs"] = {
                     "filtered_id": {"filter": {"terms": {"uuid": field_dictionary["uuid"]}}}
                 }

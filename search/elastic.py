@@ -61,6 +61,9 @@ def _translate_hits(es_response):
     if "aggregations" in es_response and "total_records" in es_response["aggregations"]:
         # Total number without Filters
         response["doc_count"] = es_response["aggregations"]["total_records"]["doc_count"]
+        if "filtered_id" in es_response["aggregations"]["total_records"]:
+            # For some low level Roles: counting for specified course_keys / program_uuids
+            response["doc_count"] = es_response["aggregations"]["total_records"]["filtered_id"]["doc_count"]
 
     return response
 
@@ -718,11 +721,19 @@ class ElasticSearchEngine(SearchEngine):
         # courses with this Flag `ga_total`
         ga_total = kwargs.pop('ga_total', None)
         if ga_total:
-            body['aggs'] = {
+            body["aggs"] = {
                 "total_records": {
                     "global": {}
                 }
             }
+            if field_dictionary.get("course", None):
+                body["aggs"]["total_records"]["aggs"] = {
+                    "filtered_id": {"filter": {"terms": {"_id": field_dictionary["course"]}}}
+                }
+            if field_dictionary.get("uuid", None):
+                body["aggs"]["total_records"]["aggs"] = {
+                    "filtered_id": {"filter": {"terms": {"uuid": field_dictionary["uuid"]}}}
+                }
 
         try:
             log.info("search body: %s", body)
@@ -731,6 +742,7 @@ class ElasticSearchEngine(SearchEngine):
                 body=body,
                 **kwargs
             )
+
         except exceptions.ElasticsearchException as ex:
             message = unicode(ex)
             if 'QueryParsingException' in message:

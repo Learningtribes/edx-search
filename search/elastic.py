@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 RESERVED_CHARACTERS = "+=><!(){}[]^~*:\\/&|?"
 
 
-def _translate_hits(es_response):
+def _translate_hits(es_response, total_keys=None):
     """ Provide resultset in our desired format from elasticsearch results """
 
     def translate_result(result):
@@ -57,6 +57,13 @@ def _translate_hits(es_response):
 
     if "facets" in es_response:
         response["facets"] = {facet: translate_facet(es_response["facets"][facet]) for facet in es_response["facets"]}
+
+    if "aggregations" in es_response and "total_records" in es_response["aggregations"]:
+        # Total number without Filters
+        response["doc_count"] = es_response["aggregations"]["total_records"]["doc_count"]
+        if total_keys is not None:
+            # For some low level Roles: counting for specified course_keys / program_uuids
+            response["doc_count"] = total_keys
 
     return response
 
@@ -709,6 +716,23 @@ class ElasticSearchEngine(SearchEngine):
         _sort_args_in_body = kwargs.pop('sort', None)
         if _sort_args_in_body:
             body['sort'] = _sort_args_in_body
+        # Get `doc_count` from ES ( without filters )
+        # E.g: if we query courses with lots of conditions, then we still return total count of
+        # courses with this Flag `ga_total`
+        total_keys = None
+        ga_total = kwargs.pop('ga_total', None)
+        if ga_total:
+            ### For high level Roles:
+            body["aggs"] = {
+                "total_records": {
+                    "global": {}
+                }
+            }
+            ### For low level Roles:
+            if "course" in field_dictionary:                # Courses
+                total_keys = len(field_dictionary["course"])
+            if "uuid" in field_dictionary:                  # Learning Paths
+                total_keys = len(field_dictionary["uuid"])
 
         try:
             log.info("search body: %s", body)
@@ -717,6 +741,7 @@ class ElasticSearchEngine(SearchEngine):
                 body=body,
                 **kwargs
             )
+
         except exceptions.ElasticsearchException as ex:
             message = unicode(ex)
             if 'QueryParsingException' in message:
@@ -727,4 +752,4 @@ class ElasticSearchEngine(SearchEngine):
                 log.exception("error while searching index - %s", ex.message)
                 raise
 
-        return _translate_hits(es_response)
+        return _translate_hits(es_response, total_keys)

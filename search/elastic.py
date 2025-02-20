@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 RESERVED_CHARACTERS = "+=><!(){}[]^~*:\\/&|?"
 
 
-def _translate_hits(es_response):
+def _translate_hits(es_response, total_keys=None):
     """ Provide resultset in our desired format from elasticsearch results """
 
     def translate_result(result):
@@ -61,9 +61,9 @@ def _translate_hits(es_response):
     if "aggregations" in es_response and "total_records" in es_response["aggregations"]:
         # Total number without Filters
         response["doc_count"] = es_response["aggregations"]["total_records"]["doc_count"]
-        if "filtered_id" in es_response["aggregations"]["total_records"]:
+        if total_keys is not None:
             # For some low level Roles: counting for specified course_keys / program_uuids
-            response["doc_count"] = es_response["aggregations"]["total_records"]["filtered_id"]["doc_count"]
+            response["doc_count"] = total_keys
 
     return response
 
@@ -719,22 +719,20 @@ class ElasticSearchEngine(SearchEngine):
         # Get `doc_count` from ES ( without filters )
         # E.g: if we query courses with lots of conditions, then we still return total count of
         # courses with this Flag `ga_total`
+        total_keys = None
         ga_total = kwargs.pop('ga_total', None)
         if ga_total:
+            ### For high level Roles:
             body["aggs"] = {
                 "total_records": {
                     "global": {}
                 }
             }
             ### For low level Roles:
-            if "course" in field_dictionary:    # Courses
-                body["aggs"]["total_records"]["aggs"] = {
-                    "filtered_id": {"filter": {"terms": {"_id": field_dictionary["course"]}}}
-                }
-            if "uuid" in field_dictionary:      # Learning Paths
-                body["aggs"]["total_records"]["aggs"] = {
-                    "filtered_id": {"filter": {"terms": {"uuid": field_dictionary["uuid"]}}}
-                }
+            if "course" in field_dictionary:                # Courses
+                total_keys = len(field_dictionary["course"])
+            if "uuid" in field_dictionary:                  # Learning Paths
+                total_keys = len(field_dictionary["uuid"])
 
         try:
             log.info("search body: %s", body)
@@ -754,4 +752,4 @@ class ElasticSearchEngine(SearchEngine):
                 log.exception("error while searching index - %s", ex.message)
                 raise
 
-        return _translate_hits(es_response)
+        return _translate_hits(es_response, total_keys)

@@ -727,11 +727,11 @@ class ElasticSearchEngine(SearchEngine):
                 }
             }
             ### For low level Roles:
-            if field_dictionary.get("course", None):    # Courses
+            if "course" in field_dictionary:    # Courses
                 body["aggs"]["total_records"]["aggs"] = {
                     "filtered_id": {"filter": {"terms": {"_id": field_dictionary["course"]}}}
                 }
-            if field_dictionary.get("uuid", None):      # Learning Paths
+            if "uuid" in field_dictionary:      # Learning Paths
                 body["aggs"]["total_records"]["aggs"] = {
                     "filtered_id": {"filter": {"terms": {"uuid": field_dictionary["uuid"]}}}
                 }

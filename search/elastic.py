@@ -59,7 +59,7 @@ def _translate_hits(es_response, total_keys=None):
         response["facets"] = {facet: translate_facet(es_response["facets"][facet]) for facet in es_response["facets"]}
 
     if "aggregations" in es_response and "total_records" in es_response["aggregations"]:
-        # Total number without Filters
+        # Total number without Filters ( also without `org` / `partner` )
         response["doc_count"] = es_response["aggregations"]["total_records"]["doc_count"]
         if total_keys is not None:
             # For some low level Roles: counting for specified course_keys / program_uuids

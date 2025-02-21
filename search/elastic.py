@@ -65,6 +65,7 @@ def _translate_hits(es_response, total_keys=None):
             # For some low level Roles: counting for specified course_keys / program_uuids
             response["doc_count"] = total_keys
         elif "filtered_org" in es_response["aggregations"]["total_records"]:
+            # For Developer/Super Admin, we may apply the total number filtered by `org` / `partner`
             response["doc_count"] = es_response["aggregations"]["total_records"]["filtered_org"]["doc_count"]
 
     return response

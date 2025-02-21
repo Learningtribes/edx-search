@@ -753,7 +753,6 @@ class ElasticSearchEngine(SearchEngine):
                 body=body,
                 **kwargs
             )
-            log.info(es_response)
         except exceptions.ElasticsearchException as ex:
             message = unicode(ex)
             if 'QueryParsingException' in message:

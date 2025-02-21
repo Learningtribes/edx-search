@@ -728,6 +728,15 @@ class ElasticSearchEngine(SearchEngine):
                     "global": {}
                 }
             }
+            if "org" in field_dictionary:                   # Courses
+                body["aggs"]["total_records"]["aggs"] = {
+                    "filtered_org": {"filter": {"terms": {"org": field_dictionary["org"]}}}
+                }
+            if "partner" in field_dictionary:               # Learning Paths
+                body["aggs"]["total_records"]["aggs"] = {
+                    "filtered_org": {"filter": {"terms": {"partner": field_dictionary["partner"]}}}
+                }
+
             ### For low level Roles:
             if "course" in field_dictionary:                # Courses
                 total_keys = len(field_dictionary["course"])
@@ -741,7 +750,7 @@ class ElasticSearchEngine(SearchEngine):
                 body=body,
                 **kwargs
             )
-
+            log.info(es_response)
         except exceptions.ElasticsearchException as ex:
             message = unicode(ex)
             if 'QueryParsingException' in message:

@@ -59,11 +59,14 @@ def _translate_hits(es_response, total_keys=None):
         response["facets"] = {facet: translate_facet(es_response["facets"][facet]) for facet in es_response["facets"]}
 
     if "aggregations" in es_response and "total_records" in es_response["aggregations"]:
-        # Total number without Filters
+        # Total number without Filters ( also without `org` / `partner` )
         response["doc_count"] = es_response["aggregations"]["total_records"]["doc_count"]
         if total_keys is not None:
             # For some low level Roles: counting for specified course_keys / program_uuids
             response["doc_count"] = total_keys
+        elif "filtered_org" in es_response["aggregations"]["total_records"]:
+            # For Developer/Super Admin, we may apply the total number filtered by `org` / `partner`
+            response["doc_count"] = es_response["aggregations"]["total_records"]["filtered_org"]["doc_count"]
 
     return response
 
@@ -728,6 +731,15 @@ class ElasticSearchEngine(SearchEngine):
                     "global": {}
                 }
             }
+            if "org" in field_dictionary:                   # Courses
+                body["aggs"]["total_records"]["aggs"] = {
+                    "filtered_org": {"filter": {"terms": {"org": field_dictionary["org"]}}}
+                }
+            if "partner" in field_dictionary:               # Learning Paths
+                body["aggs"]["total_records"]["aggs"] = {
+                    "filtered_org": {"filter": {"terms": {"partner": field_dictionary["partner"]}}}
+                }
+
             ### For low level Roles:
             if "course" in field_dictionary:                # Courses
                 total_keys = len(field_dictionary["course"])
@@ -741,7 +753,6 @@ class ElasticSearchEngine(SearchEngine):
                 body=body,
                 **kwargs
             )
-
         except exceptions.ElasticsearchException as ex:
             message = unicode(ex)
             if 'QueryParsingException' in message:

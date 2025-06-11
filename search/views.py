@@ -251,9 +251,13 @@ def course_discovery(request):
             sort_type=request.POST.get('sort_type')
         )
         for c in results['results']:
-            start = c['data']['start'].replace("+00:00", "Z")
-            start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
-            c['data']['non_started'] = not has_started(start)
+            if c['data'] and c['data']['start']:
+                start = c['data']['start'].replace("+00:00", "Z")
+                start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
+                c['data']['non_started'] = not has_started(start)
+            else:
+                log.info('[course_discovery_search] Course has no start date, data: %s', c['data'])
+                c['data']['non_started'] = False
         log.info('%s courses found.', results['total'])
 
         results["page_index"] = page # starts from 0
@@ -388,8 +392,12 @@ def program_discovery(request):
             sort_type=request.POST.get('sort_type')
         )
         for p in results['results']:
-            start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
-            p['data']['non_started'] = not has_started(start)
+            if p['data'] and p['data']['start']:
+                start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
+                p['data']['non_started'] = not has_started(start)
+            else:
+                log.info('[programs_discovery_search] Program has no start date, data: %s', p['data'])
+                p['data']['non_started'] = False
 
         log.info('%s programs found.', results['total'])
 

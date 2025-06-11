@@ -256,7 +256,7 @@ def course_discovery(request):
                 start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
                 c['data']['non_started'] = not has_started(start)
             else:
-                log.info('[course_discovery_search] Course has no start date, data: %s', c['data'])
+                log.info('[course_discovery] Course has no start date, data: %s', c['data'])
                 c['data']['non_started'] = False
         log.info('%s courses found.', results['total'])
 
@@ -396,7 +396,7 @@ def program_discovery(request):
                 start = datetime.strptime(p['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
                 p['data']['non_started'] = not has_started(start)
             else:
-                log.info('[programs_discovery_search] Program has no start date, data: %s', p['data'])
+                log.info('[program_discovery] Program has no start date, data: %s', p['data'])
                 p['data']['non_started'] = False
 
         log.info('%s programs found.', results['total'])

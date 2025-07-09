@@ -735,9 +735,9 @@ class ElasticSearchEngine(SearchEngine):
                 body["aggs"]["total_records"]["aggs"] = {
                     "filtered_org": {"filter": {"terms": {"org": field_dictionary["org"]}}}
                 }
-            if "partner" in field_dictionary:               # Learning Paths
+            if "orgs" in field_dictionary:                  # Learning Paths
                 body["aggs"]["total_records"]["aggs"] = {
-                    "filtered_org": {"filter": {"terms": {"partner": field_dictionary["partner"]}}}
+                    "filtered_org": {"filter": {"terms": {"orgs": field_dictionary["orgs"]}}}
                 }
 
             ### For low level Roles:

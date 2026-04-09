@@ -336,10 +336,51 @@ def _sort_ignore_unmapped_for_multi_index(sort_args):
     return out
 
 
-def combined_discovery_search(search_terms=None, size=20, from_=0, field_dictionary=None, only_released_courses=True, **kwargs):
+# POST keys shared by both indices (top-level, not course[...] / program[...])
+COMBINED_GLOBAL_FIELD_KEYS = ('start', 'status', 'exclude')
+
+
+def _split_legacy_field_dictionary(field_dictionary):
     """
-    Discovery search across both courseware_index and program_index in a single ES _search
-    (equivalent to GET courseware_index,program_index/_search).
+    Split a flat field_dictionary (legacy clients) into course / program / global buckets.
+    Fields present in both course and program allowed lists are copied to both.
+    """
+    course_allowed = set(course_discovery_filter_fields())
+    prog_allowed = set(program_discovery_filter_fields())
+    global_keys = set(COMBINED_GLOBAL_FIELD_KEYS)
+    cfd, pfd, gfd = {}, {}, {}
+    for key, val in field_dictionary.items():
+        if key in global_keys:
+            gfd[key] = val
+        elif key in course_allowed and key in prog_allowed:
+            cfd[key] = val
+            pfd[key] = val
+        elif key in course_allowed:
+            cfd[key] = val
+        elif key in prog_allowed:
+            pfd[key] = val
+    return cfd, pfd, gfd
+
+
+def combined_discovery_search(
+        search_terms=None,
+        size=20,
+        from_=0,
+        field_dictionary=None,
+        course_field_dictionary=None,
+        program_field_dictionary=None,
+        global_field_dictionary=None,
+        only_released_courses=True,
+        **kwargs):
+    """
+    Discovery search across both courseware_index and program_index in a single ES _search.
+
+    Field filters are applied per index (see index_field_dictionaries in elastic.search).
+
+    POST shape:
+      - Namespaced: course[org], course[modes][], program[languages], ...
+      - Shared: start, status, exclude (top-level)
+      - Legacy: single flat field_dictionary split by _split_legacy_field_dictionary
     """
     sort_args = kwargs.get('sort_type') or 'default'
     sort_args = sort_args.lower()
@@ -361,13 +402,32 @@ def combined_discovery_search(search_terms=None, size=20, from_=0, field_diction
             else:
                 exclude_dictionary[ok] = ov
 
-    use_field_dictionary = {}
-    use_field_dictionary.update({field: search_fields[field] for field in search_fields if field in use_search_fields})
-    use_field_dictionary.update(prog_search_fields)
-    if field_dictionary:
-        use_field_dictionary.update(field_dictionary)
+    course_field_dict = {}
+    course_field_dict.update({field: search_fields[field] for field in search_fields if field in use_search_fields})
+
+    if course_field_dictionary is not None or program_field_dictionary is not None:
+        course_field_dict.update(course_field_dictionary or {})
+        program_field_dict = dict(prog_search_fields)
+        program_field_dict.update(program_field_dictionary or {})
+        global_fd = dict(global_field_dictionary or {})
+    elif field_dictionary is not None:
+        lcfd, lpfd, lgfd = _split_legacy_field_dictionary(field_dictionary)
+        course_field_dict.update(lcfd)
+        program_field_dict = dict(prog_search_fields)
+        program_field_dict.update(lpfd)
+        global_fd = dict(global_field_dictionary or {})
+        global_fd.update(lgfd)
+    else:
+        program_field_dict = dict(prog_search_fields)
+        program_field_dict.update(program_field_dictionary or {})
+        global_fd = dict(global_field_dictionary or {})
+
     if not getattr(settings, "SEARCH_SKIP_ENROLLMENT_START_DATE_FILTERING", False):
-        use_field_dictionary["enrollment_start"] = DateRange(None, datetime.utcnow())
+        course_field_dict["enrollment_start"] = DateRange(None, datetime.utcnow())
+    if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
+        course_field_dict['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
+
+    program_exclude = program_field_dict.pop('exclude', None)
 
     course_index = getattr(settings, "COURSEWARE_INDEX_NAME", "courseware_index")
     program_index = getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index')
@@ -382,7 +442,7 @@ def combined_discovery_search(search_terms=None, size=20, from_=0, field_diction
         filter_dictionary.update({
             "enrollment_end": _format_filter(DateRange(datetime.utcnow(), None))
         })
-    start = use_field_dictionary.pop('start', None)
+    start = global_fd.pop('start', None)
     if start == 'current':
         if sort_args == '+display_name':
             sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
@@ -442,7 +502,7 @@ def combined_discovery_search(search_terms=None, size=20, from_=0, field_diction
                 {'raw_display_name': {'order': 'asc'}}
             ]
 
-    status = use_field_dictionary.pop('status', None)
+    status = global_fd.pop('status', None)
     if status == 'past':
         filter_dictionary.update({
             'end':
@@ -464,14 +524,13 @@ def combined_discovery_search(search_terms=None, size=20, from_=0, field_diction
                 DateRange(datetime.utcnow(), None))
         })
 
-    if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
-        use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
-
     exclude = search_fields.get('exclude', None)
     if exclude is None:
-        exclude = use_field_dictionary.pop('exclude', None)
+        exclude = global_fd.pop('exclude', None)
     else:
-        use_field_dictionary.pop('exclude', None)
+        global_fd.pop('exclude', None)
+    if exclude is None:
+        exclude = program_exclude
 
     if 'archived' == exclude:
         filter_dictionary.update(
@@ -492,7 +551,11 @@ def combined_discovery_search(search_terms=None, size=20, from_=0, field_diction
         query_strings=search_terms,
         size=size,
         from_=from_,
-        field_dictionary=use_field_dictionary,
+        field_dictionary=None,
+        index_field_dictionaries={
+            course_index: course_field_dict,
+            program_index: program_field_dict,
+        },
         filter_dictionary=filter_dictionary,
         exclude_dictionary=exclude_dictionary,
         facet_terms=facet_terms,

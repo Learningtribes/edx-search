@@ -19,6 +19,7 @@ from .api import (
     perform_search,
     course_discovery_search,
     combined_discovery_search,
+    COMBINED_GLOBAL_FIELD_KEYS,
     course_discovery_filter_fields,
     programs_discovery_search,
     program_discovery_filter_fields
@@ -80,6 +81,67 @@ def _course_process_field_values(request):
 
 def _programs_process_field_values(request):
     return _process_field_values(request, program_discovery_filter_fields())
+
+
+def _namespaced_keys_present(request):
+    """True if POST uses course[...] or program[...] filter keys."""
+    for key in request.POST:
+        if key.startswith('course[') or key.startswith('program['):
+            return True
+    return False
+
+
+def _process_namespaced_field_values(request, namespace, allowed_fields):
+    """Read course[field] / program[field] / ...[] keys (same rules as flat _process_field_values)."""
+    field_values = {}
+    for field in allowed_fields:
+        array_key = '{}[{}][]'.format(namespace, field)
+        scalar_key = '{}[{}]'.format(namespace, field)
+        if array_key in request.POST:
+            lst = request.POST.getlist(array_key)
+            field_values[field] = lst[0] if len(lst) == 1 else lst
+        elif scalar_key in request.POST:
+            filter_values = request.POST[scalar_key]
+            if field == 'vendor' and '|' in filter_values:
+                field_values[field] = filter_values.split('|')
+            elif field == 'course_category' and ',' in filter_values:
+                field_values[field] = filter_values.split(',')
+            else:
+                field_values[field] = filter_values
+    return field_values
+
+
+def _extract_global_catalog_filters(request):
+    """Top-level start, status, exclude (shared by both indices)."""
+    field_values = {}
+    for field_key in request.POST:
+        if field_key.endswith('[]'):
+            base = field_key[:-2]
+            if base in COMBINED_GLOBAL_FIELD_KEYS and request.POST.getlist(field_key):
+                lst = request.POST.getlist(field_key)
+                field_values[base] = lst[0] if len(lst) == 1 else lst
+        elif field_key in COMBINED_GLOBAL_FIELD_KEYS:
+            field_values[field_key] = request.POST[field_key]
+    return field_values
+
+
+def _combined_process_field_values(request):
+    """
+    Returns (course_field_dict, program_field_dict, global_field_dict).
+    Namespaced keys take precedence; otherwise legacy flat POST is split per allowed field lists.
+    """
+    global_fd = _extract_global_catalog_filters(request)
+    if _namespaced_keys_present(request):
+        course_fd = _process_namespaced_field_values(request, 'course', course_discovery_filter_fields())
+        prog_fd = _process_namespaced_field_values(request, 'program', program_discovery_filter_fields())
+        return course_fd, prog_fd, global_fd
+    course_fd = _process_field_values(request, course_discovery_filter_fields())
+    prog_fd = _process_field_values(request, program_discovery_filter_fields())
+    for key in COMBINED_GLOBAL_FIELD_KEYS:
+        course_fd.pop(key, None)
+        prog_fd.pop(key, None)
+    return course_fd, prog_fd, global_fd
+
 
 @require_POST
 def do_search(request, course_id=None):
@@ -474,11 +536,16 @@ def _annotate_non_started(result):
         pass
 
 
-@require_POST
+#@require_POST
 def combined_discovery(request):
     """
     Combined catalog search: POST course_discovery + program_discovery filters in one ES _search
     over courseware_index and program_index.
+
+    Filters:
+      - Per index (recommended): course[org], course[modes][], program[languages], ...
+      - Shared (both indices): top-level start, status, exclude
+      - Legacy: flat org/modes/languages/... split into course vs program by allowed field names
     """
     results = {
         "error": _("Nothing to search")
@@ -489,10 +556,7 @@ def combined_discovery(request):
 
     try:
         size, from_, page = _process_pagination_values(request)
-        field_dictionary = {}
-        field_dictionary.update(_course_process_field_values(request))
-        field_dictionary.update(_programs_process_field_values(request))
-
+        course_fd, prog_fd, global_fd = _combined_process_field_values(request)
         track.emit(
             'edx.course_discovery.search.initiated',
             {
@@ -516,7 +580,9 @@ def combined_discovery(request):
             search_terms=search_terms,
             size=size,
             from_=from_,
-            field_dictionary=field_dictionary,
+            course_field_dictionary=course_fd,
+            program_field_dictionary=prog_fd,
+            global_field_dictionary=global_fd,
             user=request.user,
             allow_enrollment_end_filter=True,
             include_course_filter=True,
@@ -569,6 +635,8 @@ def combined_discovery(request):
             err
         )
 
+    if isinstance(results, dict):
+        results.setdefault('total', 0)
     catalog_search_log(request, "combined", results)
 
     return HttpResponse(

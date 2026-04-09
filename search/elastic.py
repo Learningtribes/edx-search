@@ -309,8 +309,8 @@ class ElasticSearchEngine(SearchEngine):
         # Store index name
         super(ElasticSearchEngine, self).__init__(index)
 
-        # ES Mapping
-        if not self._es.indices.exists(index=self.index_name):
+        # ES Mapping — skip auto-create for comma-separated multi-index names (cross-index _search only)
+        if ',' not in self.index_name and not self._es.indices.exists(index=self.index_name):
             self._es.indices.create(
                 index=self.index_name, 
                 body=index_mappings if index_mappings else None

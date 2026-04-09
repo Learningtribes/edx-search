@@ -319,6 +319,190 @@ def course_discovery_search(search_terms=None, size=20, from_=0, field_dictionar
     return process_range_data(results)
 
 
+def _sort_ignore_unmapped_for_multi_index(sort_args):
+    """Ensure sorts do not fail when a field exists on only one of several indices."""
+    if not sort_args:
+        return sort_args
+    out = []
+    for clause in sort_args:
+        new_clause = {}
+        for field_name, spec in clause.items():
+            if isinstance(spec, dict):
+                spec = dict(spec)
+                if spec.get('ignore_unmapped') is None:
+                    spec['ignore_unmapped'] = True
+            new_clause[field_name] = spec
+        out.append(new_clause)
+    return out
+
+
+def combined_discovery_search(search_terms=None, size=20, from_=0, field_dictionary=None, only_released_courses=True, **kwargs):
+    """
+    Discovery search across both courseware_index and program_index in a single ES _search
+    (equivalent to GET courseware_index,program_index/_search).
+    """
+    sort_args = kwargs.get('sort_type') or 'default'
+    sort_args = sort_args.lower()
+
+    use_search_fields = ["org"]
+    if kwargs.get('include_course_filter', False) and 'user' in kwargs:
+        use_search_fields.append("course")
+    (search_fields, _, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(**kwargs)
+    (prog_search_fields, _, exclude_prog) = ProgramSearchFilterGenerator.generate_field_filters(**kwargs)
+    if exclude_prog:
+        for ok, ov in exclude_prog.items():
+            if ok in exclude_dictionary:
+                ev = exclude_dictionary[ok]
+                if not isinstance(ev, list):
+                    ev = [ev]
+                if not isinstance(ov, list):
+                    ov = [ov]
+                exclude_dictionary[ok] = ev + ov
+            else:
+                exclude_dictionary[ok] = ov
+
+    use_field_dictionary = {}
+    use_field_dictionary.update({field: search_fields[field] for field in search_fields if field in use_search_fields})
+    use_field_dictionary.update(prog_search_fields)
+    if field_dictionary:
+        use_field_dictionary.update(field_dictionary)
+    if not getattr(settings, "SEARCH_SKIP_ENROLLMENT_START_DATE_FILTERING", False):
+        use_field_dictionary["enrollment_start"] = DateRange(None, datetime.utcnow())
+
+    course_index = getattr(settings, "COURSEWARE_INDEX_NAME", "courseware_index")
+    program_index = getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index')
+    combined_index = '{},{}'.format(course_index, program_index)
+
+    searcher = SearchEngine.get_search_engine(index=combined_index)
+    if not searcher:
+        raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
+
+    filter_dictionary = {}
+    if kwargs.get('allow_enrollment_end_filter', False):
+        filter_dictionary.update({
+            "enrollment_end": _format_filter(DateRange(datetime.utcnow(), None))
+        })
+    start = use_field_dictionary.pop('start', None)
+    if start == 'current':
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'desc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(None, datetime.utcnow()))
+        })
+    elif start == 'future':
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'asc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(datetime.utcnow(), None))
+        })
+    else:
+        if sort_args == '+display_name':
+            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-display_name':
+            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+course':
+            sort_args = [{'course': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-course':
+            sort_args = [{'course': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+created':
+            sort_args = [{'created': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-created':
+            sort_args = [{'created': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '+modified':
+            sort_args = [{'modified': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
+        elif sort_args == '-modified':
+            sort_args = [{'modified': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
+        else:
+            sort_args = [
+                {'new_course_flag': {'order': 'desc'}},
+                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
+                {'start': {'order': 'desc'}},
+                {'raw_display_name': {'order': 'asc'}}
+            ]
+
+    status = use_field_dictionary.pop('status', None)
+    if status == 'past':
+        filter_dictionary.update({
+            'end':
+            _format_filter(DateRange(None, datetime.utcnow()),
+                           missing_included=False)
+        })
+    elif status == 'current':
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(None, datetime.utcnow())),
+            'end':
+            _format_filter(DateRange(datetime.utcnow(), None))
+        })
+    elif status == 'future':
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(datetime.utcnow(), None))
+        })
+
+    if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
+        use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
+
+    exclude = search_fields.get('exclude', None)
+    if exclude is None:
+        exclude = use_field_dictionary.pop('exclude', None)
+    else:
+        use_field_dictionary.pop('exclude', None)
+
+    if 'archived' == exclude:
+        filter_dictionary.update(
+            {
+                'end': _format_filter(DateRange(datetime.utcnow(), None))
+            }
+        )
+    if only_released_courses:
+        filter_dictionary["course_status"] = _format_filter("released")
+
+    facet_terms = {}
+    facet_terms.update(course_discovery_facets())
+    facet_terms.update(program_discovery_facets())
+
+    sort_args = _sort_ignore_unmapped_for_multi_index(sort_args)
+
+    results = searcher.search(
+        query_strings=search_terms,
+        size=size,
+        from_=from_,
+        field_dictionary=use_field_dictionary,
+        filter_dictionary=filter_dictionary,
+        exclude_dictionary=exclude_dictionary,
+        facet_terms=facet_terms,
+        sort=sort_args,
+        ga_total=kwargs.pop('ga_total', False)
+    )
+
+    return process_range_data(results)
+
+
 def programs_discovery_search(search_terms=None, size=20, from_=0, field_dictionary=None, only_released_courses=True, **kwargs):
     """Fetch programs data from ElasticSearch."""
     sort_args = kwargs.get('sort_type') or 'default'

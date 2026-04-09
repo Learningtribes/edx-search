@@ -5,6 +5,7 @@ import logging
 import json
 
 from datetime import datetime
+import dateutil.parser
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
@@ -17,6 +18,7 @@ from .api import (
     QueryParseError,
     perform_search,
     course_discovery_search,
+    combined_discovery_search,
     course_discovery_filter_fields,
     programs_discovery_search,
     program_discovery_filter_fields
@@ -455,3 +457,122 @@ def has_started(start_date):
         start_date (datetime): The start datetime of the course in question.
     """
     return datetime.now(UTC) > start_date if start_date is not None else False
+
+
+def _annotate_non_started(result):
+    """Set data['non_started'] for course or program hits (mixed date string formats)."""
+    data = result.get('data') or {}
+    start = data.get('start')
+    if not start or not isinstance(start, (str, unicode)):
+        return
+    try:
+        parsed = dateutil.parser.parse(start)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        data['non_started'] = not has_started(parsed)
+    except (ValueError, TypeError):
+        pass
+
+
+@require_POST
+def combined_discovery(request):
+    """
+    Combined catalog search: POST course_discovery + program_discovery filters in one ES _search
+    over courseware_index and program_index.
+    """
+    results = {
+        "error": _("Nothing to search")
+    }
+    status_code = 500
+
+    search_term = request.POST.get("search_string", None)
+
+    try:
+        size, from_, page = _process_pagination_values(request)
+        field_dictionary = {}
+        field_dictionary.update(_course_process_field_values(request))
+        field_dictionary.update(_programs_process_field_values(request))
+
+        track.emit(
+            'edx.course_discovery.search.initiated',
+            {
+                "search_term": search_term,
+                "page_size": size,
+                "page_number": page,
+            }
+        )
+
+        if search_term and is_vulnerable_text(search_term):
+            raise SyntaxError(
+                r'{field} {field_name}: {message}'.format(
+                    field=_('Field'), field_name=_('Search'),
+                    message=_('This value is invalid.')
+                )
+            )
+
+        search_terms = set(search_term.split(' ')) if search_term else None
+
+        results = combined_discovery_search(
+            search_terms=search_terms,
+            size=size,
+            from_=from_,
+            field_dictionary=field_dictionary,
+            user=request.user,
+            allow_enrollment_end_filter=True,
+            include_course_filter=True,
+            sort_type=request.POST.get('sort_type')
+        )
+        for item in results['results']:
+            _annotate_non_started(item)
+
+        log.info('%s combined catalog hits.', results['total'])
+
+        results["page_index"] = page
+        results["total_pages"] = (results["total"] + size - 1) // size
+
+        track.emit(
+            'edx.course_discovery.search.results_displayed',
+            {
+                "search_term": search_term,
+                "page_size": size,
+                "page_number": page,
+                "results_count": results['total'],
+            }
+        )
+
+        status_code = 200
+
+    except SyntaxError as syntax_err:
+        results = {
+            "illegal_search_string": unicode(syntax_err)
+        }
+
+    except ValueError as invalid_err:
+        results = {
+            "error": unicode(invalid_err)
+        }
+        log.debug(unicode(invalid_err))
+
+    except QueryParseError:
+        results = {
+            "error": _('Your query seems malformed. Check for unmatched quotes.')
+        }
+
+    except Exception as err:  # pylint: disable=broad-except
+        results = {
+            "error": _('An error occurred when searching for "{search_string}"').format(search_string=search_term)
+        }
+        log.exception(
+            'Combined discovery search exception for %s for user %s: %r',
+            search_term,
+            request.user.id,
+            err
+        )
+
+    catalog_search_log(request, "combined", results)
+
+    return HttpResponse(
+        json.dumps(results, cls=DjangoJSONEncoder),
+        content_type='application/json',
+        status=status_code
+    )

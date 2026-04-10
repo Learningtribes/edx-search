@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """ handle requests for courseware search http requests """
 # This contains just the url entry points to use if desired, which currently has only one
 # pylint: disable=too-few-public-methods
@@ -440,6 +441,173 @@ def program_discovery(request):
         )
 
     catalog_search_log(request, "programs", results)
+
+    return HttpResponse(
+        json.dumps(results, cls=DjangoJSONEncoder),
+        content_type='application/json',
+        status=status_code
+    )
+
+
+def _annotate_course_non_started(hit):
+    """Set data['non_started'] for a course hit (same as course_discovery)."""
+    start = hit['data']['start'].replace('+00:00', 'Z')
+    start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
+    hit['data']['non_started'] = not has_started(start)
+
+
+def _annotate_program_non_started(hit):
+    """Set data['non_started'] for a program hit (same as program_discovery)."""
+    start = datetime.strptime(hit['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
+    hit['data']['non_started'] = not has_started(start)
+
+
+#@require_POST
+def learning_content_discovery(request):
+    """
+    Mixed catalog: run course_discovery and program_discovery searches in parallel,
+    merge hits into one list (courses first, then programs) with content_type tags.
+
+    POST params match course_discovery / program_discovery (shared: search_string, page_size,
+    page_index, sort_type; course filters from course discovery fields; program filters
+    from program discovery fields — same flat POST keys as calling both endpoints separately).
+    """
+    results = {
+        'error': _('Nothing to search')
+    }
+    status_code = 500
+
+    search_term = request.POST.get('search_string', None)
+
+    try:
+        size, from_, page = _process_pagination_values(request)
+        course_field_dictionary = _course_process_field_values(request)
+        program_field_dictionary = _programs_process_field_values(request)
+
+        track.emit(
+            'edx.course_discovery.search.initiated',
+            {
+                'search_term': search_term,
+                'page_size': size,
+                'page_number': page,
+            }
+        )
+
+        if search_term and is_vulnerable_text(search_term):
+            raise SyntaxError(
+                r'{field} {field_name}: {message}'.format(
+                    field=_('Field'), field_name=_('Search'),
+                    message=_('This value is invalid.')
+                )
+            )
+
+        search_terms = set(search_term.split(' ')) if search_term else None
+        n_course = (size + 1) // 2
+        n_program = size - n_course
+
+        course_res = course_discovery_search(
+            search_terms=search_terms,
+            size=n_course,
+            from_=from_,
+            field_dictionary=course_field_dictionary,
+            user=request.user,
+            allow_enrollment_end_filter=True,
+            sort_type=request.POST.get('sort_type')
+        )
+        program_res = programs_discovery_search(
+            search_terms=search_term,
+            size=n_program,
+            from_=from_,
+            field_dictionary=program_field_dictionary,
+            include_course_filter=True,
+            sort_type=request.POST.get('sort_type')
+        )
+
+        merged_results = []
+        for hit in course_res.get('results', []):
+            hit = dict(hit)
+            hit['content_type'] = 'course'
+            _annotate_course_non_started(hit)
+            merged_results.append(hit)
+
+        for hit in program_res.get('results', []):
+            hit = dict(hit)
+            hit['content_type'] = 'program'
+            _annotate_program_non_started(hit)
+            merged_results.append(hit)
+
+        course_total = course_res.get('total', 0)
+        program_total = program_res.get('total', 0)
+
+        results = {
+            'took': max(course_res.get('took', 0), program_res.get('took', 0)),
+            'total': course_total + program_total,
+            'course_total': course_total,
+            'program_total': program_total,
+            'max_score': max(
+                course_res.get('max_score') or 0,
+                program_res.get('max_score') or 0
+            ),
+            'results': merged_results,
+            'facets': {
+                'course': course_res.get('facets'),
+                'program': program_res.get('facets'),
+            },
+        }
+
+        results['page_index'] = page
+        results['total_pages'] = (results['total'] + size - 1) // size if size else 0
+
+        track.emit(
+            'edx.course_discovery.search.results_displayed',
+            {
+                'search_term': search_term,
+                'page_size': size,
+                'page_number': page,
+                'results_count': results['total'],
+            }
+        )
+
+        log.info(
+            'learning_content_discovery: %s courses + %s programs (page %s).',
+            course_total,
+            program_total,
+            page
+        )
+        status_code = 200
+
+    except SyntaxError as syntax_err:
+        results = {
+            'illegal_search_string': unicode(syntax_err)
+        }
+
+    except ValueError as invalid_err:
+        results = {
+            'error': unicode(invalid_err)
+        }
+        log.debug(unicode(invalid_err))
+
+    except QueryParseError:
+        results = {
+            'error': _('Your query seems malformed. Check for unmatched quotes.')
+        }
+
+    except Exception as err:  # pylint: disable=broad-except
+        results = {
+            'error': _('An error occurred when searching for "{search_string}"').format(
+                search_string=search_term
+            )
+        }
+        log.exception(
+            'learning_content_discovery exception for %s user %s: %r',
+            search_term,
+            request.user.id,
+            err
+        )
+
+    if isinstance(results, dict):
+        results.setdefault('total', 0)
+    catalog_search_log(request, 'learning_content', results)
 
     return HttpResponse(
         json.dumps(results, cls=DjangoJSONEncoder),

@@ -169,6 +169,164 @@ def _process_exclude_dictionary(exclude_dictionary):
     }
 
 
+def build_elasticsearch_query_dict(
+        query_strings=None,
+        field_dictionary=None,
+        filter_dictionary=None,
+        exclude_dictionary=None,
+        exclude_ids=None,
+        use_field_match=False,
+        include_content=False):
+    """
+    Build the Elasticsearch ``query`` object (inner body) used by ``search``,
+    without facets, sort, or aggregations.
+    """
+    query_strings = [] if not query_strings else query_strings
+    query_strings = [query_strings] if isinstance(query_strings, (str, unicode)) else query_strings
+
+    checked_query_strings = []
+    for query_string in query_strings:
+        if len(query_string) > 1:
+            checked_query_strings.append(query_string)
+
+    elastic_queries = []
+    elastic_filters = []
+    content_fields = ["content.display_name", "content.title", "content.course_id"]
+    safe_query_strings = [
+        ''.join(r'\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
+        for query_string in checked_query_strings
+    ]
+
+    if checked_query_strings:
+        for field in content_fields:
+            elastic_queries.append({
+                "bool": {
+                    "must": [
+                        {
+                            'match': {
+                                field: {
+                                    "query": _safe_query_string,
+                                    "fuzziness":0,
+                                    "operator": "AND",
+                                    "analyzer": "standard"
+                                }
+                            }
+                        }
+                        for _safe_query_string in safe_query_strings
+                    ]
+                }
+            })
+
+    if field_dictionary:
+        if use_field_match:
+            elastic_queries.extend(_process_field_queries(field_dictionary))
+        else:
+            elastic_filters.extend(_process_field_filters(field_dictionary))
+
+    if filter_dictionary:
+        elastic_filters.extend(_process_filters(filter_dictionary))
+
+    if exclude_ids:
+        if not exclude_dictionary:
+            exclude_dictionary = {}
+        if "_id" not in exclude_dictionary:
+            exclude_dictionary["_id"] = []
+        exclude_dictionary["_id"].extend(exclude_ids)
+
+    if exclude_dictionary:
+        elastic_filters.append(_process_exclude_dictionary(exclude_dictionary))
+
+    query_segment = {
+        "match_all": {}
+    }
+    if elastic_queries:
+        query_segment = {
+            "bool": {
+                "should": elastic_queries
+            }
+        }
+
+    query = query_segment
+    if elastic_filters:
+        filter_segment = {
+            "bool": {
+                "must": elastic_filters
+            }
+        }
+        query = {
+            "filtered": {
+                "query": query_segment,
+                "filter": filter_segment,
+            }
+        }
+
+    return query
+
+
+def combine_index_queries(course_index_name, program_index_name, course_query, program_query):
+    """
+    Wrap two per-index queries into one bool query for a single multi-index
+    ``_search``. Uses the ``indices`` query (ES 1.x) so aliases resolve the
+    same way as ``GET courseware_index,program_index/_search``.
+    """
+    return {
+        "bool": {
+            "should": [
+                {
+                    "indices": {
+                        "indices": [course_index_name],
+                        "query": course_query,
+                        "no_match_query": "none"
+                    }
+                },
+                {
+                    "indices": {
+                        "indices": [program_index_name],
+                        "query": program_query,
+                        "no_match_query": "none"
+                    }
+                }
+            ],
+            "minimum_should_match": 1
+        }
+    }
+
+
+def search_mixed_discovery(engine, course_index_name, program_index_name,
+                           course_query, program_query, sort, size, from_):
+    """
+    Run one Elasticsearch request across ``course_index_name`` and
+    ``program_index_name`` with unified ``sort`` over the merged hit list.
+
+    ``engine`` must be an ``ElasticSearchEngine`` instance (provides ``_es``).
+    """
+    combined = combine_index_queries(
+        course_index_name, program_index_name, course_query, program_query
+    )
+    body = {
+        "query": combined,
+        "sort": sort,
+    }
+    index_str = u"{}".format(','.join([course_index_name, program_index_name]))
+    try:
+        log.info("search_mixed_discovery body: %s", body)
+        es_response = engine._es.search(
+            index=index_str,
+            body=body,
+            size=size,
+            from_=from_,
+        )
+    except exceptions.ElasticsearchException as ex:
+        message = unicode(ex)
+        if 'QueryParsingException' in message:
+            log.exception("Malformed mixed search query: %s", message)
+            raise QueryParseError('Malformed search query.')
+        log.exception("error while mixed search - %s", ex.message)
+        raise
+
+    return _translate_hits(es_response, None)
+
+
 def _process_facet_terms(facet_terms):
     """We have a list of terms with which we return facets.
        , keyword `facet` would be insteaded by `Aggregations` in the future.

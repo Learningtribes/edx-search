@@ -23,7 +23,8 @@ from .api import (
     course_discovery_search,
     course_discovery_filter_fields,
     programs_discovery_search,
-    program_discovery_filter_fields
+    program_discovery_filter_fields,
+    mixed_content_discovery_search,
 )
 from .initializer import SearchInitializer
 from lms.djangoapps.metrics.metrics import catalog_search_log
@@ -51,6 +52,13 @@ def _process_pagination_values(request):
             page = int(request.POST["page_index"])
             from_ = page * size
     return size, from_, page
+
+
+def _total_pages(count, page_size):
+    """Pages needed to show ``count`` items when each page holds up to ``page_size`` items."""
+    if not page_size:
+        return 0
+    return (count + page_size - 1) // page_size
 
 
 def _process_field_values(request, allowed_fields):
@@ -475,6 +483,158 @@ def _add_addtional_program_data(hit, rating_by_program):
     hit['data']['avg_rating'] = stats['avg_rating']
 
 
+def _content_type_for_mixed_hit(hit):
+    """Programs expose ``data.uuid``; courses use ``data.id`` (course key) without program uuid."""
+    data = hit.get('data') or {}
+    if data.get('uuid'):
+        return 'program'
+    return 'course'
+
+
+@csrf_exempt    # For Testing
+@require_POST
+def mixed_content_discovery(request):
+    """
+    Single Elasticsearch request across ``courseware_index`` and ``program_index`` with
+    unified sort over the merged result list. Filtering mirrors ``course_discovery`` and
+    ``program_discovery``; see ``mixed_content_discovery_search`` for details (no facets).
+    """
+    results = {'error': _('Nothing to search')}
+    status_code = 500
+    search_term = request.POST.get('search_string', None)
+
+    try:
+        size, from_, page = _process_pagination_values(request)
+        course_field_dictionary = _course_process_field_values(request)
+        program_field_dictionary = _programs_process_field_values(request)
+
+        track.emit(
+            'edx.course_discovery.search.initiated',
+            {'search_term': search_term, 'page_size': size, 'page_number': page}
+        )
+        if search_term and is_vulnerable_text(search_term):
+            raise SyntaxError(
+                r'{field} {field_name}: {message}'.format(
+                    field=_('Field'), field_name=_('Search'),
+                    message=_('This value is invalid.')
+                )
+            )
+
+        search_terms_course = set(search_term.split(' ')) if search_term else None
+
+        raw_results = mixed_content_discovery_search(
+            search_terms_course=search_terms_course,
+            search_terms_program=search_term,
+            size=size,
+            from_=from_,
+            course_field_dictionary=course_field_dictionary,
+            program_field_dictionary=program_field_dictionary,
+            only_released_courses=True,
+            sort_type=request.POST.get('sort_type'),
+            user=request.user,
+            allow_enrollment_end_filter=True,
+            include_course_filter=True,
+        )
+
+        merged_results = []
+        course_ids = []
+        program_uuids = []
+        for raw in raw_results.get('results', []):
+            hit = dict(raw)
+            ctype = _content_type_for_mixed_hit(hit)
+            hit['content_type'] = ctype
+            if ctype == 'program':
+                program_uuids.append(hit['data']['uuid'])
+            else:
+                course_ids.append(hit['data']['id'])
+            merged_results.append(hit)
+
+        rating_by_course = {}
+        if course_ids:
+            rating_rows = CourseRating.objects.filter(
+                course_id__in=course_ids
+            ).values('course_id').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
+            rating_by_course = {
+                str(row['course_id']): {
+                    'rating_count': row['rating_count'],
+                    'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
+                }
+                for row in rating_rows
+            }
+        rating_by_program = {}
+        if program_uuids:
+            rating_rows = ProgramRating.objects.filter(
+                program_uuid__in=program_uuids
+            ).values('program_uuid').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
+            rating_by_program = {
+                str(row['program_uuid']): {
+                    'rating_count': row['rating_count'],
+                    'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
+                }
+                for row in rating_rows
+            }
+
+        for hit in merged_results:
+            if hit['content_type'] == 'course':
+                _add_addtional_course_data(hit, rating_by_course)
+            else:
+                _add_addtional_program_data(hit, rating_by_program)
+
+        total = raw_results.get('total', 0)
+        results = {
+            'took': raw_results.get('took', 0),
+            'total': total,
+            'max_score': raw_results.get('max_score'),
+            'results': merged_results,
+        }
+        results['page_index'] = page
+        results['total_pages'] = _total_pages(total, size)
+
+        track.emit(
+            'edx.course_discovery.search.results_displayed',
+            {
+                'search_term': search_term, 'page_size': size, 'page_number': page,
+                'results_count': total,
+            }
+        )
+
+        log.info(
+            'mixed_content_discovery: %s total hits (page %s, page_size %s).',
+            total, page, size
+        )
+        status_code = 200
+
+    except SyntaxError as syntax_err:
+        results = {'illegal_search_string': six.text_type(syntax_err)}
+    except ValueError as invalid_err:
+        results = {'error': six.text_type(invalid_err)}
+        log.debug(six.text_type(invalid_err))
+    except QueryParseError:
+        results = {
+            'error': _('Your query seems malformed. Check for unmatched quotes.')
+        }
+    except Exception as err:  # pylint: disable=broad-except
+        results = {
+            'error': _('An error occurred when searching for "{search_string}"').format(
+                search_string=search_term
+            )
+        }
+        log.exception(
+            'mixed_content_discovery exception for %s user %s: %r',
+            search_term, request.user.id, err
+        )
+
+    if isinstance(results, dict):
+        results.setdefault('total', 0)
+    catalog_search_log(request, 'mixed_content', results)
+
+    return HttpResponse(
+        json.dumps(results, cls=DjangoJSONEncoder),
+        content_type='application/json',
+        status=status_code
+    )
+
+
 @csrf_exempt    # For Testing
 @require_POST
 def learning_content_discovery(request):
@@ -570,9 +730,6 @@ def learning_content_discovery(request):
             hit['content_type'] = 'program'
             _add_addtional_program_data(hit, rating_by_program)
             merged_results.append(hit)
-
-        def _total_pages(count, page_size):
-            return ((count + page_size - 1) // page_size) if page_size else 0
 
         course_total = course_res.get('total', 0)
         program_total = program_res.get('total', 0)

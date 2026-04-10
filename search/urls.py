@@ -14,4 +14,5 @@ urlpatterns = [
     url(r'^course_discovery/$', views.course_discovery, name='course_discovery'),
     url(r'^program_discovery/$', views.program_discovery, name='program_discovery'),
     url(r'^learning_content_discovery/$', views.learning_content_discovery, name='learning_content_discovery'),
+    url(r'^mixed_content_discovery/$', views.mixed_content_discovery, name='mixed_content_discovery'),
 ]

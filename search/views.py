@@ -7,6 +7,7 @@ import json
 
 from datetime import datetime
 from django.conf import settings
+from django.db.models import Avg, Count
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
 from django.utils.translation import ugettext as _
@@ -24,6 +25,8 @@ from .api import (
 )
 from .initializer import SearchInitializer
 from lms.djangoapps.metrics.metrics import catalog_search_log
+from lms.djangoapps.program_enrollments.models import ProgramRating
+from openedx.core.djangoapps.content.course_overviews.models import CourseRating
 from util.string_utils import is_vulnerable_text
 
 
@@ -456,17 +459,28 @@ def program_discovery(request):
     )
 
 
-def _annotate_course_non_started(hit):
+def _add_addtional_course_data(hit, rating_by_course):
     """Set data['non_started'] for a course hit (same as course_discovery)."""
     start = hit['data']['start'].replace('+00:00', 'Z')
     start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
+    stats = rating_by_course.get(
+        str(hit['data']['id']), {'rating_count': 0, 'avg_rating': 0}
+    )
+    hit['data']['rating_count'] = stats['rating_count']
+    hit['data']['avg_rating'] = stats['avg_rating']
 
 
-def _annotate_program_non_started(hit):
+def _add_addtional_program_data(hit, rating_by_program):
     """Set data['non_started'] for a program hit (same as program_discovery)."""
     start = datetime.strptime(hit['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
+    stats = rating_by_program.get(
+        str(hit['data']['uuid']), {'rating_count': 0, 'avg_rating': 0}
+    )
+    hit['data']['rating_count'] = stats['rating_count']
+    hit['data']['avg_rating'] = stats['avg_rating']
+
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -531,16 +545,39 @@ def learning_content_discovery(request):
         )
 
         merged_results = []
+
+        course_list = course_res.get('results', [])
+        rating_rows = CourseRating.objects.filter(
+            course_id__in=[c['data']['id'] for c in course_list]
+        ).values('course_id').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
+        rating_by_course = {
+            str(row['course_id']): {
+                'rating_count': row['rating_count'],
+                'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
+            }
+            for row in rating_rows
+        }
         for hit in course_res.get('results', []):
             hit = dict(hit)
             hit['content_type'] = 'course'
-            _annotate_course_non_started(hit)
+            _add_addtional_course_data(hit, rating_by_course)
             merged_results.append(hit)
 
-        for hit in program_res.get('results', []):
+        program_list = program_res.get('results', [])
+        rating_rows = ProgramRating.objects.filter(
+            program_uuid__in=[p['data']['uuid'] for p in program_list]
+        ).values('program_uuid').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
+        rating_by_program = {
+            str(row['program_uuid']): {
+                'rating_count': row['rating_count'],
+                'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
+            }
+            for row in rating_rows
+        }
+        for hit in program_list:
             hit = dict(hit)
             hit['content_type'] = 'program'
-            _annotate_program_non_started(hit)
+            _add_addtional_program_data(hit, rating_by_program)
             merged_results.append(hit)
 
         course_total = course_res.get('total', 0)

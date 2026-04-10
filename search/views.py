@@ -11,8 +11,10 @@ from django.db.models import Avg, Count
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
 from django.utils.translation import ugettext as _
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from pytz import UTC
+import six
 
 from eventtracking import tracker as track
 from .api import (
@@ -163,9 +165,9 @@ def do_search(request, course_id=None):
 
     except ValueError as invalid_err:
         results = {
-            "error": str(invalid_err)
+            "error": six.text_type(invalid_err)
         }
-        log.debug(str(invalid_err))
+        log.debug(six.text_type(invalid_err))
 
     except QueryParseError:
         results = {
@@ -279,14 +281,14 @@ def course_discovery(request):
 
     except SyntaxError as syntax_err:
         results = {
-            "illegal_search_string": str(syntax_err)
+            "illegal_search_string": six.text_type(syntax_err)
         }
 
     except ValueError as invalid_err:
         results = {
-            "error": str(invalid_err)
+            "error": six.text_type(invalid_err)
         }
-        log.debug(str(invalid_err))
+        log.debug(six.text_type(invalid_err))
 
     except QueryParseError:
         results = {
@@ -416,14 +418,14 @@ def program_discovery(request):
 
     except SyntaxError as syntax_err:
         results = {
-            "illegal_search_string": str(syntax_err)
+            "illegal_search_string": six.text_type(syntax_err)
         }
 
     except ValueError as invalid_err:
         results = {
-            "error": str(invalid_err)
+            "error": six.text_type(invalid_err)
         }
-        log.debug(str(invalid_err))
+        log.debug(six.text_type(invalid_err))
 
     except QueryParseError:
         results = {
@@ -434,7 +436,7 @@ def program_discovery(request):
     except Exception as err:
         results = {
             'error': _('An error occurred when searching for "{search_string}"').format(search_string=search_term),
-            'error_description': str(err)
+            'error_description': six.text_type(err)
         }
         log.exception(
             'Search view exception when searching for %s for user %s: %r : %s',
@@ -473,6 +475,7 @@ def _add_addtional_program_data(hit, rating_by_program):
     hit['data']['avg_rating'] = stats['avg_rating']
 
 
+@csrf_exempt    # For Testing
 @require_POST
 def learning_content_discovery(request):
     """
@@ -610,10 +613,10 @@ def learning_content_discovery(request):
         status_code = 200
 
     except SyntaxError as syntax_err:
-        results = {'illegal_search_string': str(syntax_err)}
+        results = {'illegal_search_string': six.text_type(syntax_err)}
     except ValueError as invalid_err:
-        results = {'error': str(invalid_err)}
-        log.debug(str(invalid_err))
+        results = {'error': six.text_type(invalid_err)}
+        log.debug(six.text_type(invalid_err))
     except QueryParseError:
         results = {
             'error': _('Your query seems malformed. Check for unmatched quotes.')

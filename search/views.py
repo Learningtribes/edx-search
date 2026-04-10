@@ -51,13 +51,6 @@ def _process_pagination_values(request):
     return size, from_, page
 
 
-def _total_pages(count, page_size):
-    """Pages needed to show ``count`` items when each page holds up to ``page_size`` items."""
-    if not page_size:
-        return 0
-    return (count + page_size - 1) // page_size
-
-
 def _process_field_values(request, allowed_fields):
     """ Create separate dictionary of supported filter values provided """
     field_values = {}
@@ -460,7 +453,6 @@ def program_discovery(request):
 
 
 def _add_addtional_course_data(hit, rating_by_course):
-    """Set data['non_started'] for a course hit (same as course_discovery)."""
     start = hit['data']['start'].replace('+00:00', 'Z')
     start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
@@ -472,7 +464,6 @@ def _add_addtional_course_data(hit, rating_by_course):
 
 
 def _add_addtional_program_data(hit, rating_by_program):
-    """Set data['non_started'] for a program hit (same as program_discovery)."""
     start = datetime.strptime(hit['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
     stats = rating_by_program.get(
@@ -482,9 +473,6 @@ def _add_addtional_program_data(hit, rating_by_program):
     hit['data']['avg_rating'] = stats['avg_rating']
 
 
-from django.views.decorators.csrf import csrf_exempt
-
-@csrf_exempt    # For Testing
 @require_POST
 def learning_content_discovery(request):
     """
@@ -579,6 +567,9 @@ def learning_content_discovery(request):
             hit['content_type'] = 'program'
             _add_addtional_program_data(hit, rating_by_program)
             merged_results.append(hit)
+
+        def _total_pages(count, page_size):
+            return ((count + page_size - 1) // page_size) if page_size else 0
 
         course_total = course_res.get('total', 0)
         program_total = program_res.get('total', 0)

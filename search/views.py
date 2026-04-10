@@ -48,6 +48,13 @@ def _process_pagination_values(request):
     return size, from_, page
 
 
+def _total_pages(count, page_size):
+    """Pages needed to show ``count`` items when each page holds up to ``page_size`` items."""
+    if not page_size:
+        return 0
+    return (count + page_size - 1) // page_size
+
+
 def _process_field_values(request, allowed_fields):
     """ Create separate dictionary of supported filter values provided """
     field_values = {}
@@ -470,6 +477,14 @@ def learning_content_discovery(request):
     Mixed catalog: run course_discovery and program_discovery searches in parallel,
     merge hits into one list (courses first, then programs) with content_type tags.
 
+    Pagination: each page requests up to ``page_size`` courses and up to ``page_size``
+    programs (same offset ``page_index * page_size`` for both). If one side has fewer
+    pages than the other, later pages return only the side that still has results
+    (e.g. programs exhausted while courses remain).
+
+    ``total_pages`` is max(course pages, program pages) so the pager can show one range
+    for the whole view.
+
     POST params match course_discovery / program_discovery (shared: search_string, page_size,
     page_index, sort_type; course filters from course discovery fields; program filters
     from program discovery fields — same flat POST keys as calling both endpoints separately).
@@ -496,12 +511,10 @@ def learning_content_discovery(request):
             )
 
         search_terms = set(search_term.split(' ')) if search_term else None
-        n_course = (size + 1) // 2
-        n_program = size - n_course
 
         course_res = course_discovery_search(
             search_terms=search_terms,
-            size=n_course,
+            size=size,
             from_=from_,
             field_dictionary=course_field_dictionary,
             user=request.user,
@@ -510,7 +523,7 @@ def learning_content_discovery(request):
         )
         program_res = programs_discovery_search(
             search_terms=search_term,
-            size=n_program,
+            size=size,
             from_=from_,
             field_dictionary=program_field_dictionary,
             include_course_filter=True,
@@ -532,11 +545,15 @@ def learning_content_discovery(request):
 
         course_total = course_res.get('total', 0)
         program_total = program_res.get('total', 0)
+        course_total_pages = _total_pages(course_total, size)
+        program_total_pages = _total_pages(program_total, size)
         results = {
             'took': max(course_res.get('took', 0), program_res.get('took', 0)),
             'total': course_total + program_total,
             'course_total': course_total,
             'program_total': program_total,
+            'course_total_pages': course_total_pages,
+            'program_total_pages': program_total_pages,
             'max_score': max(
                 course_res.get('max_score') or 0,
                 program_res.get('max_score') or 0
@@ -548,7 +565,7 @@ def learning_content_discovery(request):
             },
         }
         results['page_index'] = page
-        results['total_pages'] = (results['total'] + size - 1) // size if size else 0
+        results['total_pages'] = max(course_total_pages, program_total_pages)
 
         track.emit(
             'edx.course_discovery.search.results_displayed',

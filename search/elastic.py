@@ -309,8 +309,8 @@ class ElasticSearchEngine(SearchEngine):
         # Store index name
         super(ElasticSearchEngine, self).__init__(index)
 
-        # ES Mapping — skip auto-create for comma-separated multi-index names (cross-index _search only)
-        if ',' not in self.index_name and not self._es.indices.exists(index=self.index_name):
+        # ES Mapping
+        if not self._es.indices.exists(index=self.index_name):
             self._es.indices.create(
                 index=self.index_name, 
                 body=index_mappings if index_mappings else None
@@ -637,7 +637,6 @@ class ElasticSearchEngine(SearchEngine):
 
         elastic_queries = []
         elastic_filters = []
-        index_field_dictionaries = kwargs.pop('index_field_dictionaries', None)
         content_fields = ["content.display_name", "content.title", "content.course_id"]
         # We have to replace reserved characters with '\\' titled string as follow :
         # E.g. For a string including a plus sign (+), we escape it like this: \+
@@ -667,30 +666,7 @@ class ElasticSearchEngine(SearchEngine):
                     }
                 })
 
-        # Per-index field filters: bool filter with `should` only (OR across indices).
-        # ES 1.x bool *filter* does not support minimum_should_match (unlike bool query); ES 2.x
-        # also rejects msm on bool filter. Omit msm — one _index branch matches per document.
-        if index_field_dictionaries:
-            if field_dictionary:
-                log.warning(
-                    "index_field_dictionaries is set; field_dictionary is ignored for field filters."
-                )
-            should_clauses = []
-            for idx_name, fd in index_field_dictionaries.items():
-                if fd is None:
-                    fd = {}
-                branch_must = [{"term": {"_index": idx_name}}]
-                if fd:
-                    branch_filters = _process_field_filters(fd)
-                    if branch_filters:
-                        branch_must.append({"bool": {"must": branch_filters}})
-                should_clauses.append({"bool": {"must": branch_must}})
-            elastic_filters.append({
-                "bool": {
-                    "should": should_clauses
-                }
-            })
-        elif field_dictionary:
+        if field_dictionary:
             if use_field_match:
                 elastic_queries.extend(_process_field_queries(field_dictionary))
             else:
@@ -758,10 +734,6 @@ class ElasticSearchEngine(SearchEngine):
             agg_field_lookup = {}
             if field_dictionary:
                 agg_field_lookup.update(field_dictionary)
-            if index_field_dictionaries:
-                for fd in index_field_dictionaries.values():
-                    if fd:
-                        agg_field_lookup.update(fd)
             if "org" in agg_field_lookup:                   # Courses / Learning Paths
                 body["aggs"]["total_records"]["aggs"] = {
                     "filtered_org": {"filter": {"terms": {"org": agg_field_lookup["org"]}}}

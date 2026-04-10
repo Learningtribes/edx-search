@@ -731,19 +731,16 @@ class ElasticSearchEngine(SearchEngine):
                     "global": {}
                 }
             }
-            agg_field_lookup = {}
-            if field_dictionary:
-                agg_field_lookup.update(field_dictionary)
-            if "org" in agg_field_lookup:                   # Courses / Learning Paths
+            if "org" in field_dictionary:                   # Courses / Learning Paths
                 body["aggs"]["total_records"]["aggs"] = {
-                    "filtered_org": {"filter": {"terms": {"org": agg_field_lookup["org"]}}}
+                    "filtered_org": {"filter": {"terms": {"org": field_dictionary["org"]}}}
                 }
 
             ### For low level Roles:
-            if "course" in agg_field_lookup:                # Courses
-                total_keys = len(agg_field_lookup["course"])
-            if "uuid" in agg_field_lookup:                  # Learning Paths
-                total_keys = len(agg_field_lookup["uuid"])
+            if "course" in field_dictionary:                # Courses
+                total_keys = len(field_dictionary["course"])
+            if "uuid" in field_dictionary:                  # Learning Paths
+                total_keys = len(field_dictionary["uuid"])
 
         try:
             log.info("search body: %s", body)

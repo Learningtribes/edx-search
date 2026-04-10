@@ -160,9 +160,9 @@ def do_search(request, course_id=None):
 
     except ValueError as invalid_err:
         results = {
-            "error": unicode(invalid_err)
+            "error": str(invalid_err)
         }
-        log.debug(unicode(invalid_err))
+        log.debug(str(invalid_err))
 
     except QueryParseError:
         results = {
@@ -276,14 +276,14 @@ def course_discovery(request):
 
     except SyntaxError as syntax_err:
         results = {
-            "illegal_search_string": unicode(syntax_err)
+            "illegal_search_string": str(syntax_err)
         }
 
     except ValueError as invalid_err:
         results = {
-            "error": unicode(invalid_err)
+            "error": str(invalid_err)
         }
-        log.debug(unicode(invalid_err))
+        log.debug(str(invalid_err))
 
     except QueryParseError:
         results = {
@@ -413,14 +413,14 @@ def program_discovery(request):
 
     except SyntaxError as syntax_err:
         results = {
-            "illegal_search_string": unicode(syntax_err)
+            "illegal_search_string": str(syntax_err)
         }
 
     except ValueError as invalid_err:
         results = {
-            "error": unicode(invalid_err)
+            "error": str(invalid_err)
         }
-        log.debug(unicode(invalid_err))
+        log.debug(str(invalid_err))
 
     except QueryParseError:
         results = {
@@ -461,8 +461,10 @@ def _annotate_program_non_started(hit):
     start = datetime.strptime(hit['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
 
+from django.views.decorators.csrf import csrf_exempt
 
-#@require_POST
+@csrf_exempt    # For Testing
+@require_POST
 def learning_content_discovery(request):
     """
     Mixed catalog: run course_discovery and program_discovery searches in parallel,
@@ -472,11 +474,8 @@ def learning_content_discovery(request):
     page_index, sort_type; course filters from course discovery fields; program filters
     from program discovery fields — same flat POST keys as calling both endpoints separately).
     """
-    results = {
-        'error': _('Nothing to search')
-    }
+    results = {'error': _('Nothing to search')}
     status_code = 500
-
     search_term = request.POST.get('search_string', None)
 
     try:
@@ -486,13 +485,8 @@ def learning_content_discovery(request):
 
         track.emit(
             'edx.course_discovery.search.initiated',
-            {
-                'search_term': search_term,
-                'page_size': size,
-                'page_number': page,
-            }
+            {'search_term': search_term, 'page_size': size, 'page_number': page}
         )
-
         if search_term and is_vulnerable_text(search_term):
             raise SyntaxError(
                 r'{field} {field_name}: {message}'.format(
@@ -538,7 +532,6 @@ def learning_content_discovery(request):
 
         course_total = course_res.get('total', 0)
         program_total = program_res.get('total', 0)
-
         results = {
             'took': max(course_res.get('took', 0), program_res.get('took', 0)),
             'total': course_total + program_total,
@@ -554,44 +547,32 @@ def learning_content_discovery(request):
                 'program': program_res.get('facets'),
             },
         }
-
         results['page_index'] = page
         results['total_pages'] = (results['total'] + size - 1) // size if size else 0
 
         track.emit(
             'edx.course_discovery.search.results_displayed',
             {
-                'search_term': search_term,
-                'page_size': size,
-                'page_number': page,
+                'search_term': search_term, 'page_size': size, 'page_number': page,
                 'results_count': results['total'],
             }
         )
 
         log.info(
             'learning_content_discovery: %s courses + %s programs (page %s).',
-            course_total,
-            program_total,
-            page
+            course_total, program_total, page
         )
         status_code = 200
 
     except SyntaxError as syntax_err:
-        results = {
-            'illegal_search_string': unicode(syntax_err)
-        }
-
+        results = {'illegal_search_string': str(syntax_err)}
     except ValueError as invalid_err:
-        results = {
-            'error': unicode(invalid_err)
-        }
-        log.debug(unicode(invalid_err))
-
+        results = {'error': str(invalid_err)}
+        log.debug(str(invalid_err))
     except QueryParseError:
         results = {
             'error': _('Your query seems malformed. Check for unmatched quotes.')
         }
-
     except Exception as err:  # pylint: disable=broad-except
         results = {
             'error': _('An error occurred when searching for "{search_string}"').format(
@@ -600,9 +581,7 @@ def learning_content_discovery(request):
         }
         log.exception(
             'learning_content_discovery exception for %s user %s: %r',
-            search_term,
-            request.user.id,
-            err
+            search_term, request.user.id, err
         )
 
     if isinstance(results, dict):

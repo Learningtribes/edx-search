@@ -1,6 +1,7 @@
 """ Elastic Search implementation for courseware search index """
 import copy
 import logging
+import six
 
 from django.conf import settings
 from django.core.cache import cache
@@ -263,35 +264,6 @@ def build_elasticsearch_query_dict(
     return query
 
 
-def combine_index_queries(course_index_name, program_index_name, course_query, program_query):
-    """
-    Wrap two per-index queries into one bool query for a single multi-index
-    ``_search``. Uses the ``indices`` query (ES 1.x) so aliases resolve the
-    same way as ``GET courseware_index,program_index/_search``.
-    """
-    return {
-        "bool": {
-            "should": [
-                {
-                    "indices": {
-                        "indices": [course_index_name],
-                        "query": course_query,
-                        "no_match_query": "none"
-                    }
-                },
-                {
-                    "indices": {
-                        "indices": [program_index_name],
-                        "query": program_query,
-                        "no_match_query": "none"
-                    }
-                }
-            ],
-            "minimum_should_match": 1
-        }
-    }
-
-
 def search_mixed_discovery(engine, course_index_name, program_index_name,
                            course_query, program_query, sort, size, from_):
     """
@@ -300,24 +272,36 @@ def search_mixed_discovery(engine, course_index_name, program_index_name,
 
     ``engine`` must be an ``ElasticSearchEngine`` instance (provides ``_es``).
     """
-    combined = combine_index_queries(
-        course_index_name, program_index_name, course_query, program_query
-    )
     body = {
-        "query": combined,
-        "sort": sort,
+        "query": {          # Combined Indexes ( Course + Program )
+            "bool": {
+                "should": [
+                    {
+                        "indices": {
+                            "indices": [course_index_name],
+                            "query": course_query, "no_match_query": "none"
+                        }
+                    }, {
+                        "indices": {
+                            "indices": [program_index_name],
+                            "query": program_query, "no_match_query": "none"
+                        }
+                    }
+                ],
+                "minimum_should_match": 1
+            }
+        },
+        "sort": sort
     }
-    index_str = u"{}".format(','.join([course_index_name, program_index_name]))
+
     try:
         log.info("search_mixed_discovery body: %s", body)
         es_response = engine._es.search(
-            index=index_str,
-            body=body,
-            size=size,
-            from_=from_,
+            index=u"{}".format(','.join([course_index_name, program_index_name])),
+            body=body, size=size, from_=from_
         )
     except exceptions.ElasticsearchException as ex:
-        message = unicode(ex)
+        message = six.text_type(ex)
         if 'QueryParsingException' in message:
             log.exception("Malformed mixed search query: %s", message)
             raise QueryParseError('Malformed search query.')
@@ -785,90 +769,17 @@ class ElasticSearchEngine(SearchEngine):
                 }
             )
         """
-        query_strings = [] if not query_strings else query_strings
-        query_strings = [query_strings] if isinstance(query_strings, (str, unicode)) else query_strings
-
-        checked_query_strings = []
-        for query_string in query_strings:
-            if len(query_string) > 1:
-                checked_query_strings.append(query_string)
-
-        elastic_queries = []
-        elastic_filters = []
-        content_fields = ["content.display_name", "content.title", "content.course_id"]
-        # We have to replace reserved characters with '\\' titled string as follow :
-        # E.g. For a string including a plus sign (+), we escape it like this: \+
-        safe_query_strings = [
-            ''.join(r'\{}'.format(_ch) if _ch in RESERVED_CHARACTERS else _ch for _ch in list(query_string))
-            for query_string in checked_query_strings
-        ]
-
-        # We have a query string, search all fields for matching text within the "content" node
-        if checked_query_strings:
-            for field in content_fields:
-                elastic_queries.append({
-                    "bool": {
-                        "must": [
-                            {
-                                'match': {
-                                    field: {
-                                        "query": _safe_query_string,
-                                        "fuzziness":0,
-                                        "operator": "AND",
-                                        "analyzer": "standard"
-                                    }
-                                }
-                            }
-                            for _safe_query_string in safe_query_strings
-                        ]
-                    }
-                })
-
-        if field_dictionary:
-            if use_field_match:
-                elastic_queries.extend(_process_field_queries(field_dictionary))
-            else:
-                elastic_filters.extend(_process_field_filters(field_dictionary))
-
-        if filter_dictionary:
-            elastic_filters.extend(_process_filters(filter_dictionary))
-
-        # Support deprecated argument of exclude_ids
-        if exclude_ids:
-            if not exclude_dictionary:
-                exclude_dictionary = {}
-            if "_id" not in exclude_dictionary:
-                exclude_dictionary["_id"] = []
-            exclude_dictionary["_id"].extend(exclude_ids)
-
-        if exclude_dictionary:
-            elastic_filters.append(_process_exclude_dictionary(exclude_dictionary))
-
-        query_segment = {
-            "match_all": {}
+        body = {
+            "query": build_elasticsearch_query_dict(
+                query_strings=query_strings,
+                field_dictionary=field_dictionary,
+                filter_dictionary=filter_dictionary,
+                exclude_dictionary=exclude_dictionary,
+                exclude_ids=exclude_ids,
+                use_field_match=use_field_match,
+                include_content=include_content,
+            ),
         }
-        if elastic_queries:
-            query_segment = {
-                "bool": {
-                    "should": elastic_queries
-                }
-            }
-
-        query = query_segment
-        if elastic_filters:
-            filter_segment = {
-                "bool": {
-                    "must": elastic_filters
-                }
-            }
-            query = {
-                "filtered": {
-                    "query": query_segment,
-                    "filter": filter_segment,
-                }
-            }
-
-        body = {"query": query}
         if facet_terms:
             facet_query = _process_facet_terms(facet_terms)
             if facet_query:

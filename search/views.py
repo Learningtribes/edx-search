@@ -529,10 +529,8 @@ def mixed_content_discovery(request):
             from_=from_,
             course_field_dictionary=course_field_dictionary,
             program_field_dictionary=program_field_dictionary,
-            only_released_courses=True,
             sort_type=request.POST.get('sort_type'),
             user=request.user,
-            allow_enrollment_end_filter=True,
             include_course_filter=True,
         )
 

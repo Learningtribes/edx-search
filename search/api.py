@@ -323,50 +323,29 @@ def _mixed_sort_for_cross_index(sort_type):
     """
     Unified sort list for cross-index search. Uses ``missing`` so documents
     without a field (course vs program) sort last on that key.
+
+    ``ignore_unmapped`` and ``unmapped_type`` (ES 1.x string) avoid failures when
+    one index maps only ``raw_display_name`` (course) and the other only
+    ``raw_title`` (program).
     """
+    def _raw_name_sort(order):
+        """Sort clause for raw string title fields across course/program indices."""
+        return {
+            'order': order, 'missing': '_last',
+            'ignore_unmapped': True, 'unmapped_type': 'string'
+        }
+
     sort_type = (sort_type or 'default').lower()
     if sort_type == '+display_name':
         return [
-            {'raw_display_name': {'order': 'asc', 'missing': '_last'}},
-            {'raw_title': {'order': 'asc', 'missing': '_last'}},
+            {'raw_display_name': _raw_name_sort('asc')},
+            {'raw_title': _raw_name_sort('asc')},
             {'start': {'order': 'desc'}},
         ]
     if sort_type == '-display_name':
         return [
-            {'raw_display_name': {'order': 'desc', 'missing': '_last'}},
-            {'raw_title': {'order': 'desc', 'missing': '_last'}},
-            {'start': {'order': 'desc'}},
-        ]
-    if sort_type == '+course':
-        return [
-            {'course': {'order': 'asc', 'missing': '_last'}},
-            {'raw_title': {'order': 'asc', 'missing': '_last'}},
-            {'start': {'order': 'desc'}},
-        ]
-    if sort_type == '-course':
-        return [
-            {'course': {'order': 'desc', 'missing': '_last'}},
-            {'raw_title': {'order': 'desc', 'missing': '_last'}},
-            {'start': {'order': 'desc'}},
-        ]
-    if sort_type == '+created':
-        return [
-            {'created': {'order': 'asc', 'missing': '_last'}},
-            {'start': {'order': 'desc'}},
-        ]
-    if sort_type == '-created':
-        return [
-            {'created': {'order': 'desc', 'missing': '_last'}},
-            {'start': {'order': 'desc'}},
-        ]
-    if sort_type == '+modified':
-        return [
-            {'modified': {'order': 'asc', 'missing': '_last'}},
-            {'start': {'order': 'desc'}},
-        ]
-    if sort_type == '-modified':
-        return [
-            {'modified': {'order': 'desc', 'missing': '_last'}},
+            {'raw_display_name': _raw_name_sort('desc')},
+            {'raw_title': _raw_name_sort('desc')},
             {'start': {'order': 'desc'}},
         ]
     # default: same intent as course discovery default + program title
@@ -374,8 +353,8 @@ def _mixed_sort_for_cross_index(sort_type):
         {'new_course_flag': {'order': 'desc', 'missing': '_last'}},
         {'new_flag_expired_date': {'order': 'desc', 'missing': '_last'}},
         {'start': {'order': 'desc'}},
-        {'raw_display_name': {'order': 'asc', 'missing': '_last'}},
-        {'raw_title': {'order': 'asc', 'missing': '_last'}},
+        {'raw_display_name': _raw_name_sort('asc')},
+        {'raw_title': _raw_name_sort('asc')},
     ]
 
 
@@ -386,7 +365,6 @@ def mixed_content_discovery_search(
         from_=0,
         course_field_dictionary=None,
         program_field_dictionary=None,
-        only_released_courses=True,
         sort_type=None,
         **kwargs):
     """
@@ -395,7 +373,8 @@ def mixed_content_discovery_search(
 
     Query/filter construction is duplicated (not refactored) from
     ``course_discovery_search`` and ``programs_discovery_search`` so those
-    functions stay unchanged. Sort uses ``_mixed_sort_for_cross_index``.
+    functions stay unchanged. Sort is only ``_mixed_sort_for_cross_index`` (not
+    the per-index sort lists from those helpers).
     Facets are not included (use separate discovery calls if facets are required).
     """
     from .elastic import ElasticSearchEngine, search_mixed_discovery, build_elasticsearch_query_dict
@@ -409,11 +388,8 @@ def mixed_content_discovery_search(
     if not isinstance(searcher, ElasticSearchEngine):
         raise NoSearchEngineError("Mixed discovery requires Elasticsearch engine implementation")
 
-    # --- course branch (logic aligned with course_discovery_search; sort_args unused for mixed ES) ---
+    # --- course branch (query/filter only; sort is always _mixed_sort_for_cross_index) ---
     course_kwargs = dict(kwargs)
-    course_kwargs['sort_type'] = sort_type
-    sort_args = course_kwargs.get('sort_type') or 'default'
-    sort_args = sort_args.lower()
 
     use_search_fields = ["org"]
     if course_kwargs.get('include_course_filter', False) and 'user' in course_kwargs:
@@ -423,90 +399,16 @@ def mixed_content_discovery_search(
     use_field_dictionary.update({field: search_fields[field] for field in search_fields if field in use_search_fields})
     if course_field_dictionary:
         use_field_dictionary.update(course_field_dictionary)
-    if not getattr(settings, "SEARCH_SKIP_ENROLLMENT_START_DATE_FILTERING", False):
-        use_field_dictionary["enrollment_start"] = DateRange(None, datetime.utcnow())
 
     filter_dictionary = {}
-    if course_kwargs.get('allow_enrollment_end_filter', False):
-        filter_dictionary.update({
-            "enrollment_end": _format_filter(DateRange(datetime.utcnow(), None))
-        })
     start = use_field_dictionary.pop('start', None)
     if start == 'current':
-        if sort_args == '+display_name':
-            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '-display_name':
-            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-        else:
-            sort_args = [
-                {'new_course_flag': {'order': 'desc'}},
-                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-                {'start': {'order': 'desc'}},
-                {'raw_display_name': {'order': 'asc'}}
-            ]
         filter_dictionary.update({
             'start':
             _format_filter(
                 DateRange(None, datetime.utcnow()))
         })
     elif start == 'future':
-        if sort_args == '+display_name':
-            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '-display_name':
-            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-        else:
-            sort_args = [
-                {'new_course_flag': {'order': 'desc'}},
-                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-                {'start': {'order': 'asc'}},
-                {'raw_display_name': {'order': 'asc'}}
-            ]
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(datetime.utcnow(), None))
-        })
-    else:
-        if sort_args == '+display_name':
-            sort_args = [{'raw_display_name': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '-display_name':
-            sort_args = [{'raw_display_name': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '+course':
-            sort_args = [{'course': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '-course':
-            sort_args = [{'course': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '+created':
-            sort_args = [{'created': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '-created':
-            sort_args = [{'created': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '+modified':
-            sort_args = [{'modified': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-        elif sort_args == '-modified':
-            sort_args = [{'modified': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-        else:
-            sort_args = [
-                {'new_course_flag': {'order': 'desc'}},
-                {'new_flag_expired_date': {'order': 'desc', 'ignore_unmapped': True}},
-                {'start': {'order': 'desc'}},
-                {'raw_display_name': {'order': 'asc'}}
-            ]
-
-    status = use_field_dictionary.pop('status', None)
-    if status == 'past':
-        filter_dictionary.update({
-            'end':
-            _format_filter(DateRange(None, datetime.utcnow()),
-                           missing_included=False)
-        })
-    elif status == 'current':
-        filter_dictionary.update({
-            'start':
-            _format_filter(
-                DateRange(None, datetime.utcnow())),
-            'end':
-            _format_filter(DateRange(datetime.utcnow(), None))
-        })
-    elif status == 'future':
         filter_dictionary.update({
             'start':
             _format_filter(
@@ -523,8 +425,8 @@ def mixed_content_discovery_search(
                 'end': _format_filter(DateRange(datetime.utcnow(), None))
             }
         )
-    if only_released_courses:
-        filter_dictionary["course_status"] = _format_filter("released")
+
+    filter_dictionary["course_status"] = _format_filter("released")
 
     q_course = build_elasticsearch_query_dict(
         search_terms_course,
@@ -533,17 +435,8 @@ def mixed_content_discovery_search(
         exclude_dictionary,
     )
 
-    # --- program branch (logic aligned with programs_discovery_search) ---
+    # --- program branch (query/filter only; sort is always _mixed_sort_for_cross_index) ---
     program_kwargs = dict(kwargs)
-    program_kwargs['sort_type'] = sort_type
-    sort_args = program_kwargs.get('sort_type') or 'default'
-    sort_args = sort_args.lower()
-    if sort_args == '+display_name':
-        sort_args = [{'raw_title': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
-    elif sort_args == '-display_name':
-        sort_args = [{'raw_title': {'order': 'desc'}}, {'start': {'order': 'desc'}}]
-    else:
-        sort_args = [{'raw_title': {'order': 'asc'}}, {'start': {'order': 'desc'}}]
 
     use_field_dictionary, _, exclude_dictionary = ProgramSearchFilterGenerator.generate_field_filters(**program_kwargs)
     if program_field_dictionary:
@@ -576,9 +469,6 @@ def mixed_content_discovery_search(
             }
         )
 
-    if only_released_courses:
-        filter_dictionary["course_status"] = _format_filter("released")
-
     q_program = build_elasticsearch_query_dict(
         search_terms_program,
         use_field_dictionary,
@@ -586,15 +476,13 @@ def mixed_content_discovery_search(
         exclude_dictionary,
     )
 
-    sort = _mixed_sort_for_cross_index(sort_type)
-
     return search_mixed_discovery(
         searcher,
         course_idx,
         program_idx,
         q_course,
         q_program,
-        sort,
+        _mixed_sort_for_cross_index(sort_type),
         size,
         from_,
     )

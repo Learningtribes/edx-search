@@ -183,7 +183,7 @@ def build_elasticsearch_query_dict(
     without facets, sort, or aggregations.
     """
     query_strings = [] if not query_strings else query_strings
-    query_strings = [query_strings] if isinstance(query_strings, (str, unicode)) else query_strings
+    query_strings = [query_strings] if isinstance(query_strings, six.string_types) else query_strings
 
     checked_query_strings = []
     for query_string in query_strings:
@@ -819,7 +819,7 @@ class ElasticSearchEngine(SearchEngine):
                 **kwargs
             )
         except exceptions.ElasticsearchException as ex:
-            message = unicode(ex)
+            message = six.text_type(ex)
             if 'QueryParsingException' in message:
                 log.exception("Malformed search query: %s", message)
                 raise QueryParseError('Malformed search query.')

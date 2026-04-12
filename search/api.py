@@ -102,8 +102,7 @@ def perform_search(
         exclude_dictionary=exclude_dictionary,
         size=size,
         from_=from_,
-        doc_type="courseware_content",
-        include_content=True
+        doc_type="courseware_content"
     )
 
     # post-process the result

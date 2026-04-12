@@ -176,8 +176,8 @@ def build_elasticsearch_query_dict(
         filter_dictionary=None,
         exclude_dictionary=None,
         exclude_ids=None,
-        use_field_match=False,
-        include_content=False):
+        use_field_match=False
+    ):
     """
     Build the Elasticsearch ``query`` object (inner body) used by ``search``,
     without facets, sort, or aggregations.
@@ -674,7 +674,6 @@ class ElasticSearchEngine(SearchEngine):
                facet_terms=None,
                exclude_ids=None,
                use_field_match=False,
-               include_content=False,
                **kwargs):  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, arguments-differ
         """
         Implements call to search the index for the desired content.
@@ -776,8 +775,7 @@ class ElasticSearchEngine(SearchEngine):
                 filter_dictionary=filter_dictionary,
                 exclude_dictionary=exclude_dictionary,
                 exclude_ids=exclude_ids,
-                use_field_match=use_field_match,
-                include_content=include_content,
+                use_field_match=use_field_match
             ),
         }
         if facet_terms:

@@ -1,6 +1,6 @@
 """ search business logic implementations """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import dateutil.parser
 from django.conf import settings
 from collections import defaultdict

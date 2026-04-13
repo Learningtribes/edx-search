@@ -353,21 +353,21 @@ def _mixed_sort_for_cross_index(sort_type):
     sort_type = (sort_type or 'default').lower()
     if sort_type == '+display_name':
         return [
+            {'start': {'order': 'desc'}},
             {'raw_display_name': _raw_name_sort('asc')},
             {'raw_title': _raw_name_sort('asc')},
-            {'start': {'order': 'desc'}},
         ]
     if sort_type == '-display_name':
         return [
+            {'start': {'order': 'desc'}},
             {'raw_display_name': _raw_name_sort('desc')},
             {'raw_title': _raw_name_sort('desc')},
-            {'start': {'order': 'desc'}},
         ]
     # default: same intent as course discovery default + program title
     return [
+        {'start': _raw_name_sort('desc')},
         {'new_course_flag': _raw_name_sort('desc')},
         {'new_flag_expired_date': _raw_name_sort('desc')},
-        {'start': _raw_name_sort('desc')},
         {'raw_display_name': _raw_name_sort('asc')},
         {'raw_title': _raw_name_sort('asc')},
     ]

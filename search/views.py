@@ -467,7 +467,7 @@ def _add_addtional_course_data(hit, rating_by_course):
     start = datetime.strptime(start, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
     stats = rating_by_course.get(
-        str(hit['data']['id']), {'rating_count': 0, 'avg_rating': 0}
+        six.text_type(hit['data']['id']), {'rating_count': 0, 'avg_rating': 0}
     )
     hit['data']['rating_count'] = stats['rating_count']
     hit['data']['avg_rating'] = stats['avg_rating']
@@ -477,18 +477,20 @@ def _add_addtional_program_data(hit, rating_by_program):
     start = datetime.strptime(hit['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
     stats = rating_by_program.get(
-        str(hit['data']['uuid']), {'rating_count': 0, 'avg_rating': 0}
+        six.text_type(hit['data']['uuid']), {'rating_count': 0, 'avg_rating': 0}
     )
     hit['data']['rating_count'] = stats['rating_count']
     hit['data']['avg_rating'] = stats['avg_rating']
 
 
 def _content_type_for_mixed_hit(hit):
-    """Programs expose ``data.uuid``; courses use ``data.id`` (course key) without program uuid."""
-    data = hit.get('data') or {}
-    if data.get('uuid'):
+    index_name = hit.get('_index') or {}
+    if index_name.startswith('courseware_index'):
+        return 'course'
+    elif index_name.startswith('program_index'):
         return 'program'
-    return 'course'
+    else:
+        return 'ilt'
 
 
 @csrf_exempt    # For Testing
@@ -529,21 +531,18 @@ def mixed_content_discovery(request):
             from_=from_,
             course_field_dictionary=course_field_dictionary,
             program_field_dictionary=program_field_dictionary,
-            sort_type=request.POST.get('sort_type'),
-            user=request.user,
-            include_course_filter=True,
+            sort_type=request.POST.get('sort_type')
         )
 
         merged_results = []
         course_ids = []
         program_uuids = []
-        for raw in raw_results.get('results', []):
-            hit = dict(raw)
+        for hit in raw_results.get('results', []):
             ctype = _content_type_for_mixed_hit(hit)
             hit['content_type'] = ctype
             if ctype == 'program':
                 program_uuids.append(hit['data']['uuid'])
-            else:
+            elif ctype == 'course':
                 course_ids.append(hit['data']['id'])
             merged_results.append(hit)
 
@@ -553,11 +552,10 @@ def mixed_content_discovery(request):
                 course_id__in=course_ids
             ).values('course_id').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
             rating_by_course = {
-                str(row['course_id']): {
+                six.text_type(row['course_id']): {
                     'rating_count': row['rating_count'],
                     'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
-                }
-                for row in rating_rows
+                } for row in rating_rows
             }
         rating_by_program = {}
         if program_uuids:
@@ -565,17 +563,16 @@ def mixed_content_discovery(request):
                 program_uuid__in=program_uuids
             ).values('program_uuid').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
             rating_by_program = {
-                str(row['program_uuid']): {
+                six.text_type(row['program_uuid']): {
                     'rating_count': row['rating_count'],
                     'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
-                }
-                for row in rating_rows
+                } for row in rating_rows
             }
 
         for hit in merged_results:
             if hit['content_type'] == 'course':
                 _add_addtional_course_data(hit, rating_by_course)
-            else:
+            elif hit['content_type'] == 'program':
                 _add_addtional_program_data(hit, rating_by_program)
 
         total = raw_results.get('total', 0)
@@ -583,23 +580,16 @@ def mixed_content_discovery(request):
             'took': raw_results.get('took', 0),
             'total': total,
             'max_score': raw_results.get('max_score'),
-            'results': merged_results,
+            'results': merged_results
         }
         results['page_index'] = page
         results['total_pages'] = _total_pages(total, size)
 
         track.emit(
             'edx.course_discovery.search.results_displayed',
-            {
-                'search_term': search_term, 'page_size': size, 'page_number': page,
-                'results_count': total,
-            }
+            {'search_term': search_term, 'page_size': size, 'page_number': page, 'results_count': total}
         )
-
-        log.info(
-            'mixed_content_discovery: %s total hits (page %s, page_size %s).',
-            total, page, size
-        )
+        log.info('mixed_content_discovery: %s total hits (page %s, page_size %s).',total, page, size)
         status_code = 200
 
     except SyntaxError as syntax_err:
@@ -608,18 +598,13 @@ def mixed_content_discovery(request):
         results = {'error': six.text_type(invalid_err)}
         log.debug(six.text_type(invalid_err))
     except QueryParseError:
-        results = {
-            'error': _('Your query seems malformed. Check for unmatched quotes.')
-        }
+        results = {'error': _('Your query seems malformed. Check for unmatched quotes.')}
     except Exception as err:  # pylint: disable=broad-except
         results = {
-            'error': _('An error occurred when searching for "{search_string}"').format(
-                search_string=search_term
-            )
+            'error': _('An error occurred when searching for "{search_string}"').format(search_string=search_term)
         }
         log.exception(
-            'mixed_content_discovery exception for %s user %s: %r',
-            search_term, request.user.id, err
+            'mixed_content_discovery exception for %s user %s: %r', search_term, request.user.id, err
         )
 
     if isinstance(results, dict):
@@ -627,9 +612,7 @@ def mixed_content_discovery(request):
     catalog_search_log(request, 'mixed_content', results)
 
     return HttpResponse(
-        json.dumps(results, cls=DjangoJSONEncoder),
-        content_type='application/json',
-        status=status_code
+        json.dumps(results, cls=DjangoJSONEncoder), content_type='application/json', status=status_code
     )
 
 
@@ -700,7 +683,7 @@ def learning_content_discovery(request):
             course_id__in=[c['data']['id'] for c in course_list]
         ).values('course_id').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
         rating_by_course = {
-            str(row['course_id']): {
+            six.text_type(row['course_id']): {
                 'rating_count': row['rating_count'],
                 'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
             }
@@ -717,7 +700,7 @@ def learning_content_discovery(request):
             program_uuid__in=[p['data']['uuid'] for p in program_list]
         ).values('program_uuid').annotate(rating_count=Count('pk'), avg_rating=Avg('rating'))
         rating_by_program = {
-            str(row['program_uuid']): {
+            six.text_type(row['program_uuid']): {
                 'rating_count': row['rating_count'],
                 'avg_rating': row['avg_rating'] if row['avg_rating'] is not None else 0,
             }

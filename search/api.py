@@ -349,9 +349,9 @@ def _mixed_sort_for_cross_index(sort_type):
         ]
     # default: same intent as course discovery default + program title
     return [
-        {'new_course_flag': {'order': 'desc', 'missing': '_last'}},
-        {'new_flag_expired_date': {'order': 'desc', 'missing': '_last'}},
-        {'start': {'order': 'desc'}},
+        {'new_course_flag': _raw_name_sort('desc')},
+        {'new_flag_expired_date': _raw_name_sort('desc')},
+        {'start': _raw_name_sort('desc')},
         {'raw_display_name': _raw_name_sort('asc')},
         {'raw_title': _raw_name_sort('asc')},
     ]
@@ -391,8 +391,6 @@ def mixed_content_discovery_search(
     course_kwargs = dict(kwargs)
 
     use_search_fields = ["org"]
-    if course_kwargs.get('include_course_filter', False) and 'user' in course_kwargs:
-        use_search_fields.append("course")
     (search_fields, _, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(**course_kwargs)
     use_field_dictionary = {}
     use_field_dictionary.update({field: search_fields[field] for field in search_fields if field in use_search_fields})

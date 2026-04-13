@@ -585,6 +585,14 @@ def mixed_content_discovery(request):
         }
         if 'facets' in raw_results:
             results['facets'] = raw_results['facets']
+            ratings = {}
+            for rating_by in (rating_by_course, rating_by_program):
+                for i in rating_by.values():
+                    key = six.text_type(float(i['avg_rating']))
+                    ratings[key] = ratings.get(key, 0) + 1
+                results['facets']['rating'] = {
+                    'total': len(ratings.keys()), 'terms': ratings, 'other': 0, 'missing': 0
+                }
         results['page_index'] = page
         results['total_pages'] = _total_pages(total, size)
 

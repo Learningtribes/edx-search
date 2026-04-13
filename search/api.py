@@ -340,11 +340,10 @@ def _mixed_sort_for_cross_index(sort_type):
     without a field (course vs program) sort last on that key.
 
     ``ignore_unmapped`` and ``unmapped_type`` (ES 1.x string) avoid failures when
-    one index maps only ``raw_display_name`` (course) and the other only
-    ``raw_title`` (program).
+    a field is absent on one index type.
     """
     def _raw_name_sort(order):
-        """Sort clause for raw string title fields across course/program indices."""
+        """Sort clause for ``raw_display_name`` (course); unmapped program docs are skipped."""
         return {
             'order': order, 'missing': '_last',
             'ignore_unmapped': True, 'unmapped_type': 'string'
@@ -355,21 +354,18 @@ def _mixed_sort_for_cross_index(sort_type):
         return [
             {'start': {'order': 'desc'}},
             {'raw_display_name': _raw_name_sort('asc')},
-            {'raw_title': _raw_name_sort('asc')},
         ]
     if sort_type == '-display_name':
         return [
             {'start': {'order': 'desc'}},
             {'raw_display_name': _raw_name_sort('desc')},
-            {'raw_title': _raw_name_sort('desc')},
         ]
-    # default: same intent as course discovery default + program title
+    # default: same intent as course discovery default + display name tie-breaker
     return [
         {'start': _raw_name_sort('desc')},
         {'new_course_flag': _raw_name_sort('desc')},
         {'new_flag_expired_date': _raw_name_sort('desc')},
         {'raw_display_name': _raw_name_sort('asc')},
-        {'raw_title': _raw_name_sort('asc')},
     ]
 
 

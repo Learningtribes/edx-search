@@ -499,7 +499,8 @@ def mixed_content_discovery(request):
     """
     Single Elasticsearch request across ``courseware_index`` and ``program_index`` with
     unified sort over the merged result list. Filtering mirrors ``course_discovery`` and
-    ``program_discovery``; see ``mixed_content_discovery_search`` for details (no facets).
+    ``program_discovery``; see ``mixed_content_discovery_search`` (facets from
+    ``mixed_discovery_facets()``).
     """
     results = {'error': _('Nothing to search')}
     status_code = 500
@@ -531,7 +532,7 @@ def mixed_content_discovery(request):
             from_=from_,
             course_field_dictionary=course_field_dictionary,
             program_field_dictionary=program_field_dictionary,
-            sort_type=request.POST.get('sort_type')
+            sort_type=request.POST.get('sort_type'),
         )
 
         merged_results = []
@@ -582,6 +583,8 @@ def mixed_content_discovery(request):
             'max_score': raw_results.get('max_score'),
             'results': merged_results
         }
+        if 'facets' in raw_results:
+            results['facets'] = raw_results['facets']
         results['page_index'] = page
         results['total_pages'] = _total_pages(total, size)
 

@@ -265,12 +265,14 @@ def build_elasticsearch_query_dict(
 
 
 def search_mixed_discovery(engine, course_index_name, program_index_name,
-                           course_query, program_query, sort, size, from_):
+                           course_query, program_query, sort, size, from_,
+                           facet_terms=None):
     """
     Run one Elasticsearch request across ``course_index_name`` and
     ``program_index_name`` with unified ``sort`` over the merged hit list.
 
     ``engine`` must be an ``ElasticSearchEngine`` instance (provides ``_es``).
+    Optional ``facet_terms`` uses the same shape as ``ElasticSearchEngine.search``.
     """
     body = {
         "query": {          # Combined Indexes ( Course + Program )
@@ -293,6 +295,11 @@ def search_mixed_discovery(engine, course_index_name, program_index_name,
         },
         "sort": sort
     }
+
+    if facet_terms:
+        facet_query = _process_facet_terms(facet_terms)
+        if facet_query:
+            body["facets"] = facet_query
 
     try:
         log.info("search_mixed_discovery body: %s", body)

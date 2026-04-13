@@ -54,6 +54,22 @@ def program_discovery_facets():
     )
 
 
+def mixed_discovery_facets():
+    """
+    Facet config for cross-index course+program discovery.
+
+    If ``settings.MIXED_DISCOVERY_FACETS`` is set, it is used as the full facet
+    map. Otherwise the union of ``course_discovery_facets`` and
+    ``program_discovery_facets`` (program keys override on name collision).
+    """
+    custom = getattr(settings, "MIXED_DISCOVERY_FACETS", None)
+    if custom is not None:
+        return custom
+    merged = dict(course_discovery_facets())
+    merged.update(program_discovery_facets())
+    return merged
+
+
 class NoSearchEngineError(Exception):
     """ NoSearchEngineError exception to be thrown if no search engine is specified """
     pass
@@ -374,7 +390,11 @@ def mixed_content_discovery_search(
     ``course_discovery_search`` and ``programs_discovery_search`` so those
     functions stay unchanged. Sort is only ``_mixed_sort_for_cross_index`` (not
     the per-index sort lists from those helpers).
-    Facets are not included (use separate discovery calls if facets are required).
+
+    Facets are always requested using ``mixed_discovery_facets()`` (see
+    ``MIXED_DISCOVERY_FACETS`` / merged course+program defaults). Raw ES facet
+    counts are returned; ``process_range_data`` is not applied (that helper
+    assumes course-only hits for ``start``/``status`` facets).
     """
     from .elastic import ElasticSearchEngine, search_mixed_discovery, build_elasticsearch_query_dict
 
@@ -482,6 +502,7 @@ def mixed_content_discovery_search(
         _mixed_sort_for_cross_index(sort_type),
         size,
         from_,
+        facet_terms=mixed_discovery_facets(),
     )
 
 

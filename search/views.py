@@ -14,7 +14,6 @@ from django.http import HttpResponse
 from django.utils.translation import ugettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from opaque_keys.edx.keys import CourseKey
 from pytz import UTC
 import six
 
@@ -31,9 +30,7 @@ from .api import (
 from .initializer import SearchInitializer
 from lms.djangoapps.metrics.metrics import catalog_search_log
 from lms.djangoapps.program_enrollments.models import ProgramRating
-from lms.djangoapps.program_enrollments.persistance.programs import PartialProgram
 from openedx.core.djangoapps.content.course_overviews.models import CourseRating
-from student.models import CourseEnrollment
 from util.string_utils import is_vulnerable_text
 
 
@@ -477,7 +474,7 @@ def _add_addtional_course_data(hit, rating_by_course):
     hit['data']['avg_rating'] = stats['avg_rating']
 
 
-def _add_addtional_program_data(hit, rating_by_program, program_courses):
+def _add_addtional_program_data(hit, rating_by_program):
     start = datetime.strptime(hit['data']['start'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=UTC)
     hit['data']['non_started'] = not has_started(start)
     program_uuid = hit['data']['uuid']
@@ -486,7 +483,6 @@ def _add_addtional_program_data(hit, rating_by_program, program_courses):
     )
     hit['data']['rating_count'] = stats['rating_count']
     hit['data']['avg_rating'] = stats['avg_rating']
-    hit['data']['completed_course_count'] = program_courses.get(program_uuid, 0)
 
 
 def _content_type_for_mixed_hit(hit):
@@ -576,27 +572,11 @@ def mixed_content_discovery(request):
                 } for row in rating_rows
             }
 
-        program_courses = {
-            p['uuid']: {r['key'] for c in p['courses'] for r in c['course_runs']} for p in PartialProgram.query(
-                _filter={'_id': {'$in': list(rating_by_program.keys())}},
-                loading_policy=PartialProgram.POLICY_LOAD_LP_ONLY
-            )
-        }
-        all_course_keys = reduce(lambda x, y: x | y, program_courses.values())
-        completed_course_keys = {
-            six.text_type(ce.course_id) for ce in CourseEnrollment.objects.filter(
-                user=request.user,
-                course_id__in=[CourseKey.from_string(k) for k in all_course_keys],
-            ).exclude(completion_date__isnull=True)
-        }
-        for p_uuid, courses in program_courses.items():
-            program_courses[p_uuid] = len(courses & completed_course_keys)
-
         for hit in merged_results:
             if hit['content_type'] == 'course':
                 _add_addtional_course_data(hit, rating_by_course)
             elif hit['content_type'] == 'program':
-                _add_addtional_program_data(hit, rating_by_program, program_courses)
+                _add_addtional_program_data(hit, rating_by_program)
 
         total = raw_results.get('total', 0)
         results = {

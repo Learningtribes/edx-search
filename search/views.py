@@ -485,14 +485,28 @@ def _add_addtional_program_data(hit, rating_by_program):
     hit['data']['avg_rating'] = stats['avg_rating']
 
 
+def _mixed_discovery_index_names():
+    """Index name prefixes used in ES ``_index`` for mixed discovery (see settings)."""
+    return (
+        getattr(settings, 'COURSEWARE_INDEX_NAME', 'courseware_index'),
+        getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index'),
+    )
+
+
 def _content_type_for_mixed_hit(hit):
-    index_name = hit.get('_index') or {}
-    if index_name.startswith('courseware_index'):
+    """
+    Derive hit kind from Elasticsearch ``_index`` on each hit, using the same
+    configured index names as ``mixed_content_discovery_search`` / ``index_scope``.
+    """
+    index_name = hit.get('_index') or ''
+    if not isinstance(index_name, six.string_types):
+        index_name = six.text_type(index_name)
+    course_idx, program_idx = _mixed_discovery_index_names()
+    if index_name.startswith(course_idx):
         return 'course'
-    elif index_name.startswith('program_index'):
+    if index_name.startswith(program_idx):
         return 'program'
-    else:
-        return 'ilt'
+    return 'ilt'
 
 
 @csrf_exempt    # For Testing
@@ -503,6 +517,11 @@ def mixed_content_discovery(request):
     unified sort over the merged result list. Filtering mirrors ``course_discovery`` and
     ``program_discovery``; see ``mixed_content_discovery_search`` (facets from
     ``mixed_discovery_facets()``).
+
+    Optional POST ``index_scope`` (alias ``content_scope``): omit for both indices.
+    ``course`` or ``program`` restricts the search to the index whose name matches
+    Elasticsearch ``_index`` on hits (``COURSEWARE_INDEX_NAME`` /
+    ``PROGRAM_INDEX_NAME``), same rules as ``_content_type_for_mixed_hit``.
     """
     results = {'error': _('Nothing to search')}
     status_code = 500
@@ -527,6 +546,14 @@ def mixed_content_discovery(request):
 
         search_terms_course = set(search_term.split(' ')) if search_term else None
 
+        index_scope = (
+            request.POST.get('index_scope') or request.POST.get('content_scope') or ''
+        ).strip().lower()
+        if index_scope and index_scope not in ('course', 'program'):
+            raise ValueError(
+                _('Invalid index_scope; use "course", "program", or omit for both indices.')
+            )
+
         raw_results = mixed_content_discovery_search(
             search_terms_course=search_terms_course,
             search_terms_program=search_term,
@@ -535,6 +562,7 @@ def mixed_content_discovery(request):
             course_field_dictionary=course_field_dictionary,
             program_field_dictionary=program_field_dictionary,
             sort_type=request.POST.get('sort_type'),
+            index_scope=index_scope or None,
         )
 
         merged_results = []

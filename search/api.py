@@ -377,6 +377,7 @@ def mixed_content_discovery_search(
         course_field_dictionary=None,
         program_field_dictionary=None,
         sort_type=None,
+        index_scope=None,
         **kwargs):
     """
     Single Elasticsearch request over ``COURSEWARE_INDEX_NAME`` and
@@ -387,8 +388,13 @@ def mixed_content_discovery_search(
     functions stay unchanged. Sort is only ``_mixed_sort_for_cross_index`` (not
     the per-index sort lists from those helpers).
 
-    Facets are always requested using ``mixed_discovery_facets()`` (see
-    ``MIXED_DISCOVERY_FACETS`` / merged course+program defaults). Raw ES facet
+    ``index_scope``: ``None`` or empty for both indices. ``"course"`` or
+    ``"program"`` limits the request to the index whose name matches the ``_index``
+    field returned on each hit (see ``COURSEWARE_INDEX_NAME`` /
+    ``PROGRAM_INDEX_NAME``).
+
+    Facets: ``mixed_discovery_facets()`` when both indices; otherwise
+    ``course_discovery_facets()`` or ``program_discovery_facets()``. Raw ES facet
     counts are returned; ``process_range_data`` is not applied (that helper
     assumes course-only hits for ``start``/``status`` facets).
     """
@@ -489,6 +495,14 @@ def mixed_content_discovery_search(
         exclude_dictionary,
     )
 
+    scope = (index_scope or '').strip().lower()
+    if scope == 'course':
+        facet_terms = course_discovery_facets()
+    elif scope == 'program':
+        facet_terms = program_discovery_facets()
+    else:
+        facet_terms = mixed_discovery_facets()
+
     return search_mixed_discovery(
         searcher,
         course_idx,
@@ -498,7 +512,8 @@ def mixed_content_discovery_search(
         _mixed_sort_for_cross_index(sort_type),
         size,
         from_,
-        facet_terms=mixed_discovery_facets(),
+        facet_terms=facet_terms,
+        index_scope=index_scope,
     )
 
 

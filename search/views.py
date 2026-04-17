@@ -493,6 +493,31 @@ def _mixed_discovery_index_names():
     )
 
 
+def _parse_index_scope_parameter(raw):
+    """
+    Parse POST ``index_scope`` / ``content_scope`` (comma-separated).
+
+    Returns ``None`` to use API default (course + program), or an ordered list of
+    ``course`` and/or ``program`` with duplicates removed.
+    """
+    if not raw or not six.text_type(raw).strip():
+        return None
+    valid = {'course', 'program'}
+    out = []
+    for chunk in six.text_type(raw).split(','):
+        p = chunk.strip().lower()
+        if not p:
+            continue
+        if p not in valid:
+            raise ValueError(
+                _('Invalid index_scope token "%(token)s"; use course or program, comma-separated.')
+                % {'token': p}
+            )
+        if p not in out:
+            out.append(p)
+    return out if out else None
+
+
 def _content_type_for_mixed_hit(hit):
     """
     Derive hit kind from Elasticsearch ``_index`` on each hit, using the same
@@ -506,22 +531,22 @@ def _content_type_for_mixed_hit(hit):
         return 'course'
     if index_name.startswith(program_idx):
         return 'program'
-    return 'ilt'
+    return 'unknown'
 
 
 @csrf_exempt    # For Testing
 @require_POST
 def mixed_content_discovery(request):
     """
-    Single Elasticsearch request across ``courseware_index`` and ``program_index`` with
-    unified sort over the merged result list. Filtering mirrors ``course_discovery`` and
-    ``program_discovery``; see ``mixed_content_discovery_search`` (facets from
-    ``mixed_discovery_facets()``).
+    Single Elasticsearch request across catalog indices (course and program) with
+    unified sort. Filtering mirrors ``course_discovery`` / ``program_discovery``; see
+    ``mixed_content_discovery_search``.
 
-    Optional POST ``index_scope`` (alias ``content_scope``): omit for both indices.
-    ``course`` or ``program`` restricts the search to the index whose name matches
-    Elasticsearch ``_index`` on hits (``COURSEWARE_INDEX_NAME`` /
-    ``PROGRAM_INDEX_NAME``), same rules as ``_content_type_for_mixed_hit``.
+    Optional POST ``index_scope`` (alias ``content_scope``): omit for the default
+    (course + program). Comma-separated kinds select which indices to search, e.g.
+    ``program,course`` (same as default), ``course``, or ``program``. Each kind
+    matches Elasticsearch ``_index`` prefixes from ``COURSEWARE_INDEX_NAME`` and
+    ``PROGRAM_INDEX_NAME``.
     """
     results = {'error': _('Nothing to search')}
     status_code = 500
@@ -546,13 +571,9 @@ def mixed_content_discovery(request):
 
         search_terms_course = set(search_term.split(' ')) if search_term else None
 
-        index_scope = (
-            request.POST.get('index_scope') or request.POST.get('content_scope') or ''
-        ).strip().lower()
-        if index_scope and index_scope not in ('course', 'program'):
-            raise ValueError(
-                _('Invalid index_scope; use "course", "program", or omit for both indices.')
-            )
+        index_scope = _parse_index_scope_parameter(
+            request.POST.get('index_scope') or request.POST.get('content_scope')
+        )
 
         raw_results = mixed_content_discovery_search(
             search_terms_course=search_terms_course,
@@ -562,7 +583,7 @@ def mixed_content_discovery(request):
             course_field_dictionary=course_field_dictionary,
             program_field_dictionary=program_field_dictionary,
             sort_type=request.POST.get('sort_type'),
-            index_scope=index_scope or None,
+            index_scope=index_scope,
         )
 
         merged_results = []

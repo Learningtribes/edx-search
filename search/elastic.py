@@ -264,56 +264,47 @@ def build_elasticsearch_query_dict(
     return query
 
 
-def search_mixed_discovery(engine, course_index_name, program_index_name,
-                           course_query, program_query, sort, size, from_,
-                           facet_terms=None, index_scope=None):
+def search_mixed_discovery(engine, scoped_queries, sort, size, from_,
+                           facet_terms=None):
     """
-    Run one Elasticsearch request across ``course_index_name`` and
-    ``program_index_name`` with unified ``sort`` over the merged hit list.
+    Run one Elasticsearch request across one or more indices with unified ``sort``.
+
+    ``scoped_queries`` is a non-empty list of ``(index_name, query_dict)`` tuples,
+    in the order requested. Each ``index_name`` matches Elasticsearch ``_index`` on
+    hits for that branch.
 
     ``engine`` must be an ``ElasticSearchEngine`` instance (provides ``_es``).
     Optional ``facet_terms`` uses the same shape as ``ElasticSearchEngine.search``.
-
-    ``index_scope`` (optional): ``"course"`` or ``"program"`` to search only the
-    index whose name matches the ``_index`` field on hits (same prefixes as
-    ``course_index_name`` / ``program_index_name``). Omit for both indices.
     """
-    scope = (index_scope or '').strip().lower()
-    if scope == 'course':
+    if not scoped_queries:
+        raise ValueError("scoped_queries must not be empty")
+
+    if len(scoped_queries) == 1:
         body = {
-            "query": course_query,
+            "query": scoped_queries[0][1],
             "sort": sort,
         }
-        search_index = course_index_name
-    elif scope == 'program':
-        body = {
-            "query": program_query,
-            "sort": sort,
-        }
-        search_index = program_index_name
+        search_index = scoped_queries[0][0]
     else:
         body = {
-            "query": {          # Combined Indexes ( Course + Program )
+            "query": {
                 "bool": {
                     "should": [
                         {
                             "indices": {
-                                "indices": [course_index_name],
-                                "query": course_query, "no_match_query": "none"
-                            }
-                        }, {
-                            "indices": {
-                                "indices": [program_index_name],
-                                "query": program_query, "no_match_query": "none"
+                                "indices": [index_name],
+                                "query": query_dict,
+                                "no_match_query": "none",
                             }
                         }
+                        for index_name, query_dict in scoped_queries
                     ],
                     "minimum_should_match": 1
                 }
             },
             "sort": sort
         }
-        search_index = u"{}".format(','.join([course_index_name, program_index_name]))
+        search_index = u"{}".format(','.join(name for name, _ in scoped_queries))
 
     if facet_terms:
         facet_query = _process_facet_terms(facet_terms)

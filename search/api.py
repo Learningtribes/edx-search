@@ -2,6 +2,7 @@
 import logging
 from datetime import datetime
 import dateutil.parser
+import six
 from django.conf import settings
 from collections import defaultdict
 
@@ -68,6 +69,58 @@ def mixed_discovery_facets():
     merged = dict(course_discovery_facets())
     merged.update(program_discovery_facets())
     return merged
+
+
+def _facet_terms_for_index_scope(scopes):
+    """
+    Facet map for a requested list of index kinds (``course``, ``program``).
+
+    When only course+program are selected, ``mixed_discovery_facets()`` is used so
+    ``MIXED_DISCOVERY_FACETS`` overrides still apply; otherwise facets are merged
+    from the selected indices.
+    """
+    if set(scopes) == {'course', 'program'}:
+        return mixed_discovery_facets()
+    merged = {}
+    if 'course' in scopes:
+        merged.update(course_discovery_facets())
+    if 'program' in scopes:
+        merged.update(program_discovery_facets())
+    return merged
+
+
+def _normalize_index_scope(index_scope):
+    """
+    Normalize to an ordered list of index kinds. ``None`` means course+program
+    (legacy mixed discovery default). Accepts a comma-separated string or a list.
+    """
+    default = ['course', 'program']
+    if index_scope is None:
+        return list(default)
+    if isinstance(index_scope, (list, tuple)):
+        parts = [
+            six.text_type(x).strip().lower()
+            for x in index_scope
+            if six.text_type(x).strip()
+        ]
+    else:
+        parts = [
+            p.strip().lower()
+            for p in six.text_type(index_scope).split(',')
+            if p.strip()
+        ]
+    valid = {'course', 'program'}
+    out = []
+    for p in parts:
+        if p not in valid:
+            raise ValueError(
+                'Invalid index_scope token %r; expected one of: course, program.' % (p,)
+            )
+        if p not in out:
+            out.append(p)
+    if not out:
+        return list(default)
+    return out
 
 
 class NoSearchEngineError(Exception):
@@ -380,23 +433,19 @@ def mixed_content_discovery_search(
         index_scope=None,
         **kwargs):
     """
-    Single Elasticsearch request over ``COURSEWARE_INDEX_NAME`` and
-    ``PROGRAM_INDEX_NAME`` with a unified sort over the merged hit list.
+    Single Elasticsearch request over one or more catalog indices with unified sort.
 
     Query/filter construction is duplicated (not refactored) from
     ``course_discovery_search`` and ``programs_discovery_search`` so those
     functions stay unchanged. Sort is only ``_mixed_sort_for_cross_index`` (not
     the per-index sort lists from those helpers).
 
-    ``index_scope``: ``None`` or empty for both indices. ``"course"`` or
-    ``"program"`` limits the request to the index whose name matches the ``_index``
-    field returned on each hit (see ``COURSEWARE_INDEX_NAME`` /
-    ``PROGRAM_INDEX_NAME``).
+    ``index_scope``: ``None`` for the default ``course`` + ``program`` indices.
+    Otherwise a comma-separated string or list of kinds: ``course``, ``program``.
+    Each kind maps to ``COURSEWARE_INDEX_NAME`` or ``PROGRAM_INDEX_NAME`` (hits
+    expose the matching ``_index`` field).
 
-    Facets: ``mixed_discovery_facets()`` when both indices; otherwise
-    ``course_discovery_facets()`` or ``program_discovery_facets()``. Raw ES facet
-    counts are returned; ``process_range_data`` is not applied (that helper
-    assumes course-only hits for ``start``/``status`` facets).
+    Raw ES facet counts are returned; ``process_range_data`` is not applied.
     """
     from .elastic import ElasticSearchEngine, search_mixed_discovery, build_elasticsearch_query_dict
 
@@ -495,25 +544,20 @@ def mixed_content_discovery_search(
         exclude_dictionary,
     )
 
-    scope = (index_scope or '').strip().lower()
-    if scope == 'course':
-        facet_terms = course_discovery_facets()
-    elif scope == 'program':
-        facet_terms = program_discovery_facets()
-    else:
-        facet_terms = mixed_discovery_facets()
+    scopes = _normalize_index_scope(index_scope)
+    scope_queries = {
+        'course': (course_idx, q_course),
+        'program': (program_idx, q_program),
+    }
+    scoped_queries = [scope_queries[k] for k in scopes]
 
     return search_mixed_discovery(
         searcher,
-        course_idx,
-        program_idx,
-        q_course,
-        q_program,
+        scoped_queries,
         _mixed_sort_for_cross_index(sort_type),
         size,
         from_,
-        facet_terms=facet_terms,
-        index_scope=index_scope,
+        facet_terms=_facet_terms_for_index_scope(scopes),
     )
 
 

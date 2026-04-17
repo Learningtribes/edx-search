@@ -551,7 +551,7 @@ def mixed_content_discovery_search(
     }
     scoped_queries = [scope_queries[k] for k in scopes]
 
-    return search_mixed_discovery(
+    results = search_mixed_discovery(
         searcher,
         scoped_queries,
         _mixed_sort_for_cross_index(sort_type),
@@ -559,6 +559,7 @@ def mixed_content_discovery_search(
         from_,
         facet_terms=_facet_terms_for_index_scope(scopes),
     )
+    return process_range_data(results)
 
 
 def programs_discovery_search(search_terms=None, size=20, from_=0, field_dictionary=None, only_released_courses=True, **kwargs):

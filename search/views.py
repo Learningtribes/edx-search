@@ -576,13 +576,15 @@ def mixed_content_discovery(request):
 
         course_filters = set(course_field_dictionary.keys())
         program_filters = set(program_field_dictionary.keys())
-        # IF we apply a filter only belong the `course_index`, then we query only on the `course_index` Only:
-        if isinstance(index_scope, list) and (course_filters - program_filters) and not (program_filters - course_filters):
-            if u'program' in index_scope:
-                index_scope.remove(u'program')
-        if isinstance(index_scope, list) and not (course_filters - program_filters) and (program_filters - course_filters):
-            if u'course' in index_scope:
-                index_scope.remove(u'course')
+        # As the Learning paths' filters is a subset of the Courses' filters:
+        # IF we apply the filters only belong to the `course_index`, then we query only on the `course_index` Only:
+        if (isinstance(index_scope, list) and u'program' in index_scope
+                and (course_filters - program_filters) and not (program_filters - course_filters)):
+            index_scope.remove(u'program')
+        # IF we apply the filters only belong to the `program_index`, then we query only on the `program_index` Only:
+        if (isinstance(index_scope, list) and u'course' in index_scope
+                and (program_filters - course_filters) and not (course_filters - program_filters)):
+            index_scope.remove(u'course')
 
         raw_results = mixed_content_discovery_search(
             search_terms_course=search_terms_course,

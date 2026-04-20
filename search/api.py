@@ -1,7 +1,8 @@
 """ search business logic implementations """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import dateutil.parser
+import six
 from django.conf import settings
 from collections import defaultdict
 
@@ -54,6 +55,74 @@ def program_discovery_facets():
     )
 
 
+def mixed_discovery_facets():
+    """
+    Facet config for cross-index course+program discovery.
+
+    If ``settings.MIXED_DISCOVERY_FACETS`` is set, it is used as the full facet
+    map. Otherwise the union of ``course_discovery_facets`` and
+    ``program_discovery_facets`` (program keys override on name collision).
+    """
+    custom = getattr(settings, "MIXED_DISCOVERY_FACETS", None)
+    if custom is not None:
+        return custom
+    merged = dict(course_discovery_facets())
+    merged.update(program_discovery_facets())
+    return merged
+
+
+def _facet_terms_for_index_scope(scopes):
+    """
+    Facet map for a requested list of index kinds (``course``, ``program``).
+
+    When only course+program are selected, ``mixed_discovery_facets()`` is used so
+    ``MIXED_DISCOVERY_FACETS`` overrides still apply; otherwise facets are merged
+    from the selected indices.
+    """
+    if set(scopes) == {'course', 'program'}:
+        return mixed_discovery_facets()
+    merged = {}
+    if 'course' in scopes:
+        merged.update(course_discovery_facets())
+    if 'program' in scopes:
+        merged.update(program_discovery_facets())
+    return merged
+
+
+def _normalize_index_scope(index_scope):
+    """
+    Normalize to an ordered list of index kinds. ``None`` means course+program
+    (legacy mixed discovery default). Accepts a comma-separated string or a list.
+    """
+    default = ['course', 'program']
+    if index_scope is None:
+        return list(default)
+    if isinstance(index_scope, (list, tuple)):
+        parts = [
+            six.text_type(x).strip().lower()
+            for x in index_scope
+            if six.text_type(x).strip()
+        ]
+    else:
+        parts = [
+            p.strip().lower()
+            for p in six.text_type(index_scope).split(',')
+            if p.strip()
+        ]
+    valid = {'course', 'program'}
+    out = []
+    for p in parts:
+        if p not in valid:
+            raise ValueError(
+                'Invalid index_scope token %r; expected one of: course, program.' % (p,)
+            )
+        if p not in out:
+            out.append(p)
+    if not out:
+        return list(default)
+    return out
+
+
 class NoSearchEngineError(Exception):
     """ NoSearchEngineError exception to be thrown if no search engine is specified """
     pass
@@ -102,8 +171,7 @@ def perform_search(
         exclude_dictionary=exclude_dictionary,
         size=size,
         from_=from_,
-        doc_type="courseware_content",
-        include_content=True
+        doc_type="courseware_content"
     )
 
     # post-process the result
@@ -316,6 +384,181 @@ def course_discovery_search(search_terms=None, size=20, from_=0, field_dictionar
         ga_total=kwargs.pop('ga_total', False)
     )
 
+    return process_range_data(results)
+
+
+def _mixed_sort_for_cross_index(sort_type):
+    """
+    Unified sort list for cross-index search. Uses ``missing`` so documents
+    without a field (course vs program) sort last on that key.
+
+    ``ignore_unmapped`` and ``unmapped_type`` (ES 1.x string) avoid failures when
+    a field is absent on one index type.
+    """
+    def _raw_name_sort(order):
+        """Sort clause for ``raw_display_name`` (course); unmapped program docs are skipped."""
+        return {
+            'order': order, 'missing': '_last',
+            'ignore_unmapped': True, 'unmapped_type': 'string'
+        }
+
+    sort_type = (sort_type or 'default').lower()
+    if sort_type == '+display_name':
+        return [
+            {'start': {'order': 'desc'}},
+            {'raw_display_name': _raw_name_sort('asc')},
+        ]
+    if sort_type == '-display_name':
+        return [
+            {'start': {'order': 'desc'}},
+            {'raw_display_name': _raw_name_sort('desc')},
+        ]
+    # default: same intent as course discovery default + display name tie-breaker
+    return [
+        {'start': _raw_name_sort('desc')},
+        {'new_course_flag': _raw_name_sort('desc')},
+        {'new_flag_expired_date': _raw_name_sort('desc')},
+        {'raw_display_name': _raw_name_sort('asc')},
+    ]
+
+
+def mixed_content_discovery_search(
+        search_terms_course=None,
+        search_terms_program=None,
+        size=20,
+        from_=0,
+        course_field_dictionary=None,
+        program_field_dictionary=None,
+        sort_type=None,
+        index_scope=None,
+        **kwargs):
+    """
+    Single Elasticsearch request over one or more catalog indices with unified sort.
+
+    Query/filter construction is duplicated (not refactored) from
+    ``course_discovery_search`` and ``programs_discovery_search`` so those
+    functions stay unchanged. Sort is only ``_mixed_sort_for_cross_index`` (not
+    the per-index sort lists from those helpers).
+
+    ``index_scope``: ``None`` for the default ``course`` + ``program`` indices.
+    Otherwise a comma-separated string or list of kinds: ``course``, ``program``.
+    Each kind maps to ``COURSEWARE_INDEX_NAME`` or ``PROGRAM_INDEX_NAME`` (hits
+    expose the matching ``_index`` field).
+
+    Raw ES facet counts are returned; ``process_range_data`` is not applied.
+    """
+    from .elastic import ElasticSearchEngine, search_mixed_discovery, build_elasticsearch_query_dict
+
+    course_idx = getattr(settings, "COURSEWARE_INDEX_NAME", "courseware_index")
+    program_idx = getattr(settings, 'PROGRAM_INDEX_NAME', 'program_index')
+
+    searcher = SearchEngine.get_search_engine(course_idx)
+    if not searcher:
+        raise NoSearchEngineError("No search engine specified in settings.SEARCH_ENGINE")
+    if not isinstance(searcher, ElasticSearchEngine):
+        raise NoSearchEngineError("Mixed discovery requires Elasticsearch engine implementation")
+
+    # --- course branch (query/filter only; sort is always _mixed_sort_for_cross_index) ---
+    course_kwargs = dict(kwargs)
+
+    use_search_fields = ["org"]
+    (search_fields, _, exclude_dictionary) = CourseSearchFilterGenerator.generate_field_filters(**course_kwargs)
+    use_field_dictionary = {}
+    use_field_dictionary.update({field: search_fields[field] for field in search_fields if field in use_search_fields})
+    if course_field_dictionary:
+        use_field_dictionary.update(course_field_dictionary)
+
+    filter_dictionary = {}
+    start = use_field_dictionary.pop('start', None)
+    if start == 'current':
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(None, datetime.utcnow()))
+        })
+    elif start == 'future':
+        filter_dictionary.update({
+            'start':
+            _format_filter(
+                DateRange(datetime.utcnow(), None))
+        })
+
+    if getattr(settings, 'ALLOW_CATALOG_VISIBILITY_FILTER', False):
+        use_field_dictionary['catalog_visibility'] = CATALOG_VISIBILITY_CATALOG_AND_ABOUT
+
+    exclude = search_fields.get('exclude', None)
+    if 'archived' == exclude:
+        filter_dictionary.update(
+            {
+                'end': _format_filter(DateRange(datetime.utcnow(), None))
+            }
+        )
+
+    filter_dictionary["course_status"] = _format_filter("released")
+
+    q_course = build_elasticsearch_query_dict(
+        search_terms_course,
+        use_field_dictionary,
+        filter_dictionary,
+        exclude_dictionary,
+    )
+
+    # --- program branch (query/filter only; sort is always _mixed_sort_for_cross_index) ---
+    program_kwargs = dict(kwargs)
+
+    use_field_dictionary, _, exclude_dictionary = ProgramSearchFilterGenerator.generate_field_filters(**program_kwargs)
+    if program_field_dictionary:
+        use_field_dictionary.update(program_field_dictionary)
+
+    filter_dictionary = {}
+    start = use_field_dictionary.pop('start', None)
+    if start == 'current':
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(None, datetime.utcnow())
+                )
+            }
+        )
+    elif start == 'future':
+        filter_dictionary.update(
+            {
+                'start': _format_filter(
+                    DateRange(datetime.utcnow(), None)
+                )
+            }
+        )
+
+    exclude = use_field_dictionary.pop('exclude', None)
+    if 'archived' == exclude:
+        filter_dictionary.update(
+            {
+                'end': _format_filter(DateRange(datetime.utcnow(), None))
+            }
+        )
+
+    q_program = build_elasticsearch_query_dict(
+        search_terms_program,
+        use_field_dictionary,
+        filter_dictionary,
+        exclude_dictionary,
+    )
+
+    scopes = _normalize_index_scope(index_scope)
+    scope_queries = {
+        'course': (course_idx, q_course),
+        'program': (program_idx, q_program),
+    }
+    scoped_queries = [scope_queries[k] for k in scopes]
+
+    results = search_mixed_discovery(
+        searcher,
+        scoped_queries,
+        _mixed_sort_for_cross_index(sort_type),
+        size,
+        from_,
+        facet_terms=_facet_terms_for_index_scope(scopes),
+    )
     return process_range_data(results)
 
 

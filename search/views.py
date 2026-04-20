@@ -575,6 +575,14 @@ def mixed_content_discovery(request):
             request.POST.get('index_scope') or request.POST.get('content_scope')
         )
 
+        course_filters = set(course_field_dictionary.keys())
+        program_filters = set(program_field_dictionary.keys())
+        # IF we apply a filter only belong the `course_index`, then we query only on the `course_index` Only:
+        if isinstance(index_scope, list) and (course_filters - program_filters) and not (program_filters - course_filters):
+            index_scope.remove(u'program')
+        if isinstance(index_scope, list) and not (course_filters - program_filters) and (program_filters - course_filters):
+            index_scope.remove(u'course')
+
         raw_results = mixed_content_discovery_search(
             search_terms_course=search_terms_course,
             search_terms_program=search_term,

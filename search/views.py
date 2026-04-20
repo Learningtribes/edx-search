@@ -534,7 +534,6 @@ def _content_type_for_mixed_hit(hit):
     return 'unknown'
 
 
-@csrf_exempt    # For Testing
 @require_POST
 def mixed_content_discovery(request):
     """

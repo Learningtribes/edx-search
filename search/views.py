@@ -15,6 +15,7 @@ from django.utils.translation import ugettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from pytz import UTC
+import re
 import six
 
 from eventtracking import tracker as track
@@ -568,7 +569,7 @@ def mixed_content_discovery(request):
                 )
             )
 
-        search_terms_course = set(search_term.split(' ')) if search_term else None
+        search_terms_words = re.split(r'[, ]+', search_term) if search_term else None
 
         index_scope = _parse_index_scope_parameter(
             request.POST.get('index_scope') or request.POST.get('content_scope')
@@ -587,8 +588,8 @@ def mixed_content_discovery(request):
             index_scope.remove(u'course')
 
         raw_results = mixed_content_discovery_search(
-            search_terms_course=search_terms_course,
-            search_terms_program=search_term,
+            search_terms_course=search_terms_words,
+            search_terms_program=search_terms_words,
             size=size,
             from_=from_,
             course_field_dictionary=course_field_dictionary,

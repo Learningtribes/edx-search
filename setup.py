@@ -19,6 +19,7 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.6',
         'Framework :: Django',
         'Framework :: Django :: 1.8',
         'Framework :: Django :: 1.9',
@@ -28,6 +29,7 @@ setup(
     packages=['search', 'search.tests'],
     install_requires=[
         "django >= 1.8, < 2.0",
-        "elasticsearch>=1.0.0,<2.0.0"
+        "elasticsearch>=1.0.0,<2.0.0",
+        "six"
     ]
 )

@@ -1,9 +1,13 @@
 """ Implementation of search interface to be used for tests where ElasticSearch is unavailable """
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import copy
 from datetime import datetime
 import json
 import os
 import pytz
+
+import six
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
@@ -37,7 +41,7 @@ def _find_field(doc, field_name):
     if not isinstance(doc, dict):
         raise ValueError('Parameter `doc` should be a python dict object')
 
-    if not isinstance(field_name, basestring):
+    if not isinstance(field_name, six.string_types):
         raise ValueError('Parameter `field_name` should be a string')
 
     immediate_field, remaining_path = field_name.split('.', 1) if '.' in field_name else (field_name, None)
@@ -67,7 +71,7 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
 
         # if we have a string that we are trying to process as a date object
         if isinstance(field_value, (DateRange, datetime)):
-            if isinstance(compare_value, basestring):
+            if isinstance(compare_value, six.string_types):
                 compare_value = json_date_to_datetime(compare_value)
 
             field_has_tz_info = False
@@ -96,7 +100,7 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
             return any((item == compare_value for item in field_value))
 
         elif _is_iterable(compare_value) and _is_iterable(field_value):
-            return any((unicode(item) in field_value for item in compare_value))
+            return any((six.text_type(item) in field_value for item in compare_value))
 
         return compare_value == field_value
 
@@ -110,8 +114,8 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
 def _process_query_string(documents_to_search, query_string):
     """ keep the documents that contain at least one of the search strings provided """
     def _encode_string(string):
-        """Encode a Unicode string in the same way as the Elasticsearch search engine."""
-        return string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
+        """Strip the characters the Elasticsearch engine treats as reserved."""
+        return u''.join(char for char in string if char not in RESERVED_CHARACTERS)
 
     def has_string(dictionary_object, search_string):
         """ search for string in dictionary items, look down into nested dictionaries """

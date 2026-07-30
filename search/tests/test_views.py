@@ -1,6 +1,9 @@
 """ High-level view tests"""
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from datetime import datetime
 import ddt
+import six
 
 from django.core.urlresolvers import Resolver404, resolve
 from django.test import TestCase
@@ -48,7 +51,7 @@ class MockSearchUrlTest(TestCase, SearcherMixin):
         """Ensures an search initiated event was emitted"""
         initiated_search_call = self.mock_tracker.emit.mock_calls[0]  # pylint: disable=maybe-no-member
         expected_result = call('edx.course.search.initiated', {
-            "search_term": unicode(search_term),
+            "search_term": six.text_type(search_term),
             "page_size": size,
             "page_number": page,
         })
@@ -58,7 +61,7 @@ class MockSearchUrlTest(TestCase, SearcherMixin):
         """Ensures an results returned event was emitted"""
         returned_results_call = self.mock_tracker.emit.mock_calls[1]  # pylint: disable=maybe-no-member
         expected_result = call('edx.course.search.results_displayed', {
-            "search_term": unicode(search_term),
+            "search_term": six.text_type(search_term),
             "page_size": size,
             "page_number": page,
             "results_count": total,

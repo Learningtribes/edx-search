@@ -1,4 +1,6 @@
 """ Elastic Search implementation for courseware search index """
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import copy
 import logging
 import six
@@ -322,7 +324,7 @@ def search_mixed_discovery(engine, scoped_queries, sort, size, from_,
         if 'QueryParsingException' in message:
             log.exception("Malformed mixed search query: %s", message)
             raise QueryParseError('Malformed search query.')
-        log.exception("error while mixed search - %s", ex.message)
+        log.exception("error while mixed search - %s", six.text_type(ex))
         raise
 
     return _translate_hits(es_response, None)
@@ -373,7 +375,7 @@ class ElasticSearchEngine(SearchEngine):
         """ Logs indexing errors and raises a general ElasticSearch Exception"""
         indexing_errors_log = []
         for indexing_error in indexing_errors:
-            indexing_errors_log.append(indexing_error.message)
+            indexing_errors_log.append(six.text_type(indexing_error))
         raise exceptions.ElasticsearchException(', '.join(indexing_errors_log))
 
     def _get_mappings(self, doc_type):
@@ -582,7 +584,7 @@ class ElasticSearchEngine(SearchEngine):
         # Broad exception handler to protect around bulk call
         except Exception as ex:
             # log information and re-raise
-            log.exception("error while indexing - %s", ex.message)
+            log.exception("error while indexing - %s", six.text_type(ex))
             raise
 
     def displace_index_to_alias(self, new_index_name, alias_name, expired_index_name=None):
@@ -629,7 +631,7 @@ class ElasticSearchEngine(SearchEngine):
             return existing_indexs
 
         except Exception as e:
-            log.exception('error while displacing alias - %s'.format(e.message))
+            log.exception('error while displacing alias - %s', six.text_type(e))
             raise
 
     def remove_by_index_name(self, index_name, retry_times=3):
@@ -641,7 +643,7 @@ class ElasticSearchEngine(SearchEngine):
                 return
 
             except Exception as e:
-                log.exception('error while deleting index - %s'.format(e.message))
+                log.exception('error while deleting index - %s', six.text_type(e))
 
     def remove(self, doc_type, doc_ids, **kwargs):
         """ Implements call to remove the documents from the index """
@@ -840,7 +842,7 @@ class ElasticSearchEngine(SearchEngine):
                 raise QueryParseError('Malformed search query.')
             else:
                 # log information and re-raise
-                log.exception("error while searching index - %s", ex.message)
+                log.exception("error while searching index - %s", six.text_type(ex))
                 raise
 
         return _translate_hits(es_response, total_keys)

@@ -1,4 +1,6 @@
 """ overridable result processor object to allow additional properties to be exposed """
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import inspect
 from itertools import chain
 import json
@@ -6,6 +8,8 @@ import logging
 import re
 import shlex
 import textwrap
+
+import six
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
@@ -43,8 +47,8 @@ class SearchResultProcessor(object):
     @staticmethod
     def strings_in_dictionary(dictionary):
         """ Used by default implementation for finding excerpt """
-        strings = [value for value in dictionary.itervalues() if not isinstance(value, dict)]
-        for child_dict in [dv for dv in dictionary.itervalues() if isinstance(dv, dict)]:
+        strings = [value for value in six.itervalues(dictionary) if not isinstance(value, dict)]
+        for child_dict in [dv for dv in six.itervalues(dictionary) if isinstance(dv, dict)]:
             strings.extend(SearchResultProcessor.strings_in_dictionary(child_dict))
         return strings
 
@@ -117,7 +121,7 @@ class SearchResultProcessor(object):
         # protect around any problems introduced by subclasses within their properties
         except Exception as ex:  # pylint: disable=broad-except
             log.exception("error processing properties for %s - %s: will remove from results",
-                          json.dumps(dictionary, cls=DjangoJSONEncoder), ex.message)
+                          json.dumps(dictionary, cls=DjangoJSONEncoder), six.text_type(ex))
             return None
         return dictionary
 
@@ -130,10 +134,14 @@ class SearchResultProcessor(object):
             return None
 
         match_phrases = [self._match_phrase]
-        separate_phrases = [
-            phrase.decode('utf-8')
-            for phrase in shlex.split(self._match_phrase.encode('utf-8'))
-        ]
+        if six.PY2:
+            # shlex.split does not handle unicode on Python 2, so round-trip via utf-8 bytes.
+            separate_phrases = [
+                phrase.decode('utf-8')
+                for phrase in shlex.split(self._match_phrase.encode('utf-8'))
+            ]
+        else:
+            separate_phrases = shlex.split(self._match_phrase)
         if len(separate_phrases) > 1:
             match_phrases.extend(separate_phrases)
         else:

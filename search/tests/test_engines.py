@@ -6,10 +6,12 @@
 import json
 import os
 from datetime import datetime
+from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.test.utils import override_settings
 from search.api import NoSearchEngineError, perform_search
+from search.filter_generator import SearchFilterGenerator
 from search.tests.mock_search_engine import MockSearchEngine, json_date_to_datetime
 from search.tests.tests import MockSearchTests
 
@@ -119,3 +121,22 @@ class TestNone(TestCase):
         """ search opertaion should yeild an exception with no search engine """
         with self.assertRaises(NoSearchEngineError):
             perform_search("abc test")
+
+
+class PerformSearchTests(SimpleTestCase):
+    """Tests for LMS courseware search API behavior."""
+
+    def test_course_discovery_exclude_marker_is_not_a_content_field(self):
+        """The discovery-only marker must not become an ES content-field filter."""
+        searcher = Mock()
+        searcher.search_string.return_value = {"results": [], "total": 0}
+        with patch.object(
+            SearchFilterGenerator,
+            "generate_field_filters",
+            return_value=({"course": "course-v1:org+course+run", "exclude": "archived"}, {}, {}),
+        ), patch("search.api.SearchEngine.get_search_engine", return_value=searcher):
+            perform_search("lesson", course_id="course-v1:org+course+run")
+
+        search_fields = searcher.search_string.call_args.kwargs["field_dictionary"]
+        self.assertEqual(search_fields["course"], "course-v1:org+course+run")
+        self.assertNotIn("exclude", search_fields)

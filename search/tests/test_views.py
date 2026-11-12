@@ -1,7 +1,8 @@
 """ High-level view tests"""
 from datetime import datetime
-import ddt
 
+import ddt
+import six
 from django.core.urlresolvers import Resolver404, resolve
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -10,7 +11,7 @@ from mock import patch, call
 from search.search_engine_base import SearchEngine
 from search.tests.mock_search_engine import MockSearchEngine
 from search.tests.tests import TEST_INDEX_NAME
-from search.tests.utils import post_discovery_request, post_request, SearcherMixin
+from search.tests.utils import SearchFailure, post_discovery_request, post_request, SearcherMixin
 
 
 # Any class that inherits from TestCase will cause too-many-public-methods pylint error
@@ -48,7 +49,7 @@ class MockSearchUrlTest(TestCase, SearcherMixin):
         """Ensures an search initiated event was emitted"""
         initiated_search_call = self.mock_tracker.emit.mock_calls[0]  # pylint: disable=maybe-no-member
         expected_result = call('edx.course.search.initiated', {
-            "search_term": unicode(search_term),
+            "search_term": six.text_type(search_term),
             "page_size": size,
             "page_number": page,
         })
@@ -58,7 +59,7 @@ class MockSearchUrlTest(TestCase, SearcherMixin):
         """Ensures an results returned event was emitted"""
         returned_results_call = self.mock_tracker.emit.mock_calls[1]  # pylint: disable=maybe-no-member
         expected_result = call('edx.course.search.results_displayed', {
-            "search_term": unicode(search_term),
+            "search_term": six.text_type(search_term),
             "page_size": size,
             "page_number": page,
             "results_count": total,
@@ -427,7 +428,7 @@ class BadSearchTest(TestCase, SearcherMixin):
         self.assertGreater(code, 499)
         self.assertEqual(results["error"], 'An error occurred when searching for "sun"')
 
-        with self.assertRaises(StandardError):
+        with self.assertRaises(SearchFailure):
             searcher.search(query_string="test search")
 
 
@@ -446,7 +447,7 @@ class BadIndexTest(TestCase, SearcherMixin):
     def test_search_from_url(self):
         """ ensure that we get the error back when the backend fails """
         searcher = SearchEngine.get_search_engine(TEST_INDEX_NAME)
-        with self.assertRaises(StandardError):
+        with self.assertRaises(SearchFailure):
             searcher.index("courseware_content", [{"id": "FAKE_ID_3", "content": {"text": "Here comes the sun"}}])
 
 

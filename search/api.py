@@ -238,7 +238,7 @@ def process_range_data(results):
             new_start_terms['future']
 
             for key, value in start_terms.items():
-                if not isinstance(key, (str, unicode, bytes, bytearray)):
+                if not isinstance(key, (six.string_types, six.binary_type, bytearray)):
                     continue
                 key = dateutil.parser.parse(key, ignoretz=True)
                 
@@ -259,10 +259,10 @@ def process_range_data(results):
             end_term = course.get('data', {}).get('end', None)
             now = datetime.utcnow()
             # start property always has value(not None)
-            if not isinstance(start_term, (str, unicode, bytes, bytearray)):
+            if not isinstance(start_term, (six.string_types, six.binary_type, bytearray)):
                 continue
             if start_term and dateutil.parser.parse(start_term, ignoretz=True) <= now:
-                if not isinstance(end_term, (str, unicode, bytes, bytearray)):
+                if not isinstance(end_term, (six.string_types, six.binary_type, bytearray)):
                     continue
                 if end_term and dateutil.parser.parse(end_term, ignoretz=True) <= now:
                     status_terms['past'] += 1

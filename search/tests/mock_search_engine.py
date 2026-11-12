@@ -44,7 +44,9 @@ def _find_field(doc, field_name):
     immediate_field, remaining_path = field_name.split('.', 1) if '.' in field_name else (field_name, None)
     field_value = doc.get(immediate_field)
 
-    if isinstance(field_value, dict):
+    # Only descend when a dotted path remains; otherwise the dict itself is the value
+    # (needed for equality checks against literal nested objects).
+    if isinstance(field_value, dict) and remaining_path is not None:
         return _find_field(field_value, remaining_path)
 
     return field_value
@@ -126,6 +128,28 @@ def _apply_additional_filters(documents_to_search, additional_filters):
     ]
 
 
+# Keys written by search.api._format_filter for discovery filter_dictionary entries.
+_DISCOVERY_FILTER_KEYS = frozenset(['value', 'missing_included'])
+
+
+def _unwrap_discovery_filter(field_value, default_include_blanks=False):
+    """
+    Unwrap discovery ``_format_filter`` wrappers; leave other values unchanged.
+
+    Only dicts that contain exactly ``value`` and ``missing_included`` are treated
+    as wrappers, so a literal field value like ``{'value': 'x'}`` is not misfired.
+    """
+    if (
+        isinstance(field_value, dict)
+        and frozenset(field_value.keys()) == _DISCOVERY_FILTER_KEYS
+    ):
+        return (
+            field_value['value'],
+            field_value.get('missing_included', default_include_blanks),
+        )
+    return field_value, default_include_blanks
+
+
 def _filter_intersection(documents_to_search, dictionary_object, include_blanks=False):
     """
     Filters out documents that do not match all of the field values within the dictionary_object
@@ -134,17 +158,10 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
     if not dictionary_object:
         return documents_to_search
 
-    def value_matches(doc, field_name, field_value):
+    def value_matches(doc, field_name, field_value, include_missing):
         """
-        Does the document's field match the desired value, or is the field not present if include_blanks is True
+        Does the document's field match the desired value, or is the field not present if include_missing is True
         """
-        # Unwrap discovery-style filter dicts: {'value': ..., 'missing_included': ...}
-        if isinstance(field_value, dict) and 'value' in field_value:
-            include_missing = field_value.get('missing_included', include_blanks)
-            field_value = field_value['value']
-        else:
-            include_missing = include_blanks
-
         compare_value = _find_field(doc, field_name)
         if compare_value is None:
             return include_missing
@@ -186,7 +203,14 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
 
     filtered_documents = documents_to_search
     for field_name, field_value in dictionary_object.items():
-        filtered_documents = [d for d in filtered_documents if value_matches(d, field_name, field_value)]
+        match_value, include_missing = _unwrap_discovery_filter(
+            field_value, include_blanks
+        )
+        filtered_documents = [
+            document
+            for document in filtered_documents
+            if value_matches(document, field_name, match_value, include_missing)
+        ]
 
     return filtered_documents
 

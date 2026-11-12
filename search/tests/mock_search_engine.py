@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 import os
 import pytz
+import six
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
@@ -37,7 +38,7 @@ def _find_field(doc, field_name):
     if not isinstance(doc, dict):
         raise ValueError('Parameter `doc` should be a python dict object')
 
-    if not isinstance(field_name, basestring):
+    if not isinstance(field_name, six.string_types):
         raise ValueError('Parameter `field_name` should be a string')
 
     immediate_field, remaining_path = field_name.split('.', 1) if '.' in field_name else (field_name, None)
@@ -49,6 +50,104 @@ def _find_field(doc, field_name):
     return field_value
 
 
+def _document_matches_es_filter(document, es_filter):
+    """
+    Evaluate a small subset of ES 1.x filter DSL against an in-memory document.
+    Supports ``or``, ``missing``, ``term``, and ``range`` (gte/lte/gt/lt).
+    """
+    if not es_filter:
+        return True
+
+    if 'or' in es_filter:
+        return any(
+            _document_matches_es_filter(document, clause)
+            for clause in es_filter['or']
+        )
+
+    if 'and' in es_filter:
+        return all(
+            _document_matches_es_filter(document, clause)
+            for clause in es_filter['and']
+        )
+
+    if 'missing' in es_filter:
+        field = es_filter['missing']['field']
+        return _find_field(document, field) is None
+
+    if 'term' in es_filter:
+        field, expected = next(iter(es_filter['term'].items()))
+        return _find_field(document, field) == expected
+
+    if 'range' in es_filter:
+        field, bounds = next(iter(es_filter['range'].items()))
+        compare_value = _find_field(document, field)
+        if compare_value is None:
+            return False
+        if isinstance(compare_value, six.string_types) and (
+            'T' in compare_value or len(compare_value) == 10
+        ):
+            try:
+                compare_value = json_date_to_datetime(compare_value)
+            except ValueError:
+                pass
+
+        def _bound(raw):
+            if isinstance(raw, six.string_types) and ('T' in raw or len(raw) == 10):
+                try:
+                    return json_date_to_datetime(raw)
+                except ValueError:
+                    return raw
+            return raw
+
+        if 'gte' in bounds and not (compare_value >= _bound(bounds['gte'])):
+            return False
+        if 'gt' in bounds and not (compare_value > _bound(bounds['gt'])):
+            return False
+        if 'lte' in bounds and not (compare_value <= _bound(bounds['lte'])):
+            return False
+        if 'lt' in bounds and not (compare_value < _bound(bounds['lt'])):
+            return False
+        return True
+
+    return False
+
+
+def _apply_additional_filters(documents_to_search, additional_filters):
+    """Keep documents that match every raw ES filter in ``additional_filters``."""
+    if not additional_filters:
+        return documents_to_search
+    return [
+        document
+        for document in documents_to_search
+        if all(
+            _document_matches_es_filter(document, es_filter)
+            for es_filter in additional_filters
+        )
+    ]
+
+
+# Keys written by search.api._format_filter for discovery filter_dictionary entries.
+_DISCOVERY_FILTER_KEYS = frozenset(['value', 'missing_included'])
+
+
+def _unwrap_discovery_filter(field_value, default_include_blanks=False):
+    """
+    Unwrap discovery ``_format_filter`` wrappers; leave other values unchanged.
+
+    Only dicts that contain exactly ``value`` and ``missing_included`` are treated
+    as wrappers, so a literal field value like ``{'value': 'x'}`` is not misfired.
+    """
+    if (
+        isinstance(field_value, dict)
+        and frozenset(field_value.keys()) == _DISCOVERY_FILTER_KEYS
+    ):
+        return (
+            field_value['value'],
+            field_value.get('missing_included', default_include_blanks),
+        )
+    return field_value, default_include_blanks
+
+
 def _filter_intersection(documents_to_search, dictionary_object, include_blanks=False):
     """
     Filters out documents that do not match all of the field values within the dictionary_object
@@ -57,17 +156,17 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
     if not dictionary_object:
         return documents_to_search
 
-    def value_matches(doc, field_name, field_value):
+    def value_matches(doc, field_name, field_value, include_missing):
         """
-        Does the document's field match the desired value, or is the field not present if include_blanks is True
+        Does the document's field match the desired value, or is the field not present if include_missing is True
         """
         compare_value = _find_field(doc, field_name)
         if compare_value is None:
-            return include_blanks
+            return include_missing
 
         # if we have a string that we are trying to process as a date object
         if isinstance(field_value, (DateRange, datetime)):
-            if isinstance(compare_value, basestring):
+            if isinstance(compare_value, six.string_types):
                 compare_value = json_date_to_datetime(compare_value)
 
             field_has_tz_info = False
@@ -96,22 +195,32 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
             return any((item == compare_value for item in field_value))
 
         elif _is_iterable(compare_value) and _is_iterable(field_value):
-            return any((unicode(item) in field_value for item in compare_value))
+            return any((six.text_type(item) in field_value for item in compare_value))
 
         return compare_value == field_value
 
     filtered_documents = documents_to_search
     for field_name, field_value in dictionary_object.items():
-        filtered_documents = [d for d in filtered_documents if value_matches(d, field_name, field_value)]
+        match_value, include_missing = _unwrap_discovery_filter(
+            field_value, include_blanks
+        )
+        filtered_documents = [
+            document
+            for document in filtered_documents
+            if value_matches(document, field_name, match_value, include_missing)
+        ]
 
     return filtered_documents
 
 
 def _process_query_string(documents_to_search, query_string):
     """ keep the documents that contain at least one of the search strings provided """
-    def _encode_string(string):
-        """Encode a Unicode string in the same way as the Elasticsearch search engine."""
-        return string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
+    def _normalize(text):
+        """Drop reserved characters and lowercase, as text (Py2 and Py3)."""
+        if isinstance(text, six.binary_type):
+            text = text.decode('utf-8')
+        text = six.text_type(text)
+        return ''.join(ch for ch in text if ch not in RESERVED_CHARACTERS).lower()
 
     def has_string(dictionary_object, search_string):
         """ search for string in dictionary items, look down into nested dictionaries """
@@ -119,11 +228,11 @@ def _process_query_string(documents_to_search, query_string):
             if isinstance(dictionary_object[name], dict):
                 return has_string(dictionary_object[name], search_string)
             elif dictionary_object[name]:
-                if search_string.lower() in _encode_string(dictionary_object[name].lower()):
+                if search_string in _normalize(dictionary_object[name]):
                     return True
         return False
 
-    search_strings = _encode_string(query_string).split(" ")
+    search_strings = _normalize(query_string).split(" ")
     documents_to_keep = []
     for search_string in search_strings:
         documents_to_keep.extend(
@@ -363,6 +472,7 @@ class MockSearchEngine(SearchEngine):
                exclude_dictionary=None,
                facet_terms=None,
                targeting_gate=None,
+               additional_filters=None,
                **kwargs):  # pylint: disable=too-many-arguments
         """ Perform search upon documents within index """
         if MockSearchEngine._disabled:
@@ -386,6 +496,11 @@ class MockSearchEngine(SearchEngine):
 
         if filter_dictionary:
             documents_to_search = _filter_intersection(documents_to_search, filter_dictionary, True)
+
+        if additional_filters:
+            documents_to_search = _apply_additional_filters(
+                documents_to_search, additional_filters
+            )
 
         if query_string:
             documents_to_search = _process_query_string(documents_to_search, query_string)

@@ -212,11 +212,17 @@ def build_elasticsearch_query_dict(
         exclude_dictionary=None,
         exclude_ids=None,
         use_field_match=False,
+        additional_filters=None,
         targeting_gate=None,
     ):
     """
     Build the Elasticsearch ``query`` object (inner body) used by ``search``,
     without facets, sort, or aggregations.
+
+    ``additional_filters`` is an optional list of raw ES 1.x filter clauses
+    appended after ``filter_dictionary`` processing (e.g. program not-archived).
+    ``targeting_gate`` is an optional audience-targeting gate from the filter
+    generators.
     """
     query_strings = [] if not query_strings else query_strings
     query_strings = [query_strings] if isinstance(query_strings, six.string_types) else query_strings
@@ -262,6 +268,9 @@ def build_elasticsearch_query_dict(
 
     if filter_dictionary:
         elastic_filters.extend(_process_filters(filter_dictionary))
+
+    if additional_filters:
+        elastic_filters.extend(additional_filters)
 
     if exclude_ids:
         if not exclude_dictionary:
@@ -362,7 +371,7 @@ def search_mixed_discovery(engine, scoped_queries, sort, size, from_,
         if 'QueryParsingException' in message:
             log.exception("Malformed mixed search query: %s", message)
             raise QueryParseError('Malformed search query.')
-        log.exception("error while mixed search - %s", ex.message)
+        log.exception("error while mixed search - %s", message)
         raise
 
     return _translate_hits(es_response, None)
@@ -413,7 +422,7 @@ class ElasticSearchEngine(SearchEngine):
         """ Logs indexing errors and raises a general ElasticSearch Exception"""
         indexing_errors_log = []
         for indexing_error in indexing_errors:
-            indexing_errors_log.append(indexing_error.message)
+            indexing_errors_log.append(six.text_type(indexing_error))
         raise exceptions.ElasticsearchException(', '.join(indexing_errors_log))
 
     def _get_mappings(self, doc_type):
@@ -622,7 +631,7 @@ class ElasticSearchEngine(SearchEngine):
         # Broad exception handler to protect around bulk call
         except Exception as ex:
             # log information and re-raise
-            log.exception("error while indexing - %s", ex.message)
+            log.exception("error while indexing - %s", six.text_type(ex))
             raise
 
     def displace_index_to_alias(self, new_index_name, alias_name, expired_index_name=None):
@@ -669,7 +678,7 @@ class ElasticSearchEngine(SearchEngine):
             return existing_indexs
 
         except Exception as e:
-            log.exception('error while displacing alias - %s'.format(e.message))
+            log.exception('error while displacing alias - %s', six.text_type(e))
             raise
 
     def remove_by_index_name(self, index_name, retry_times=3):
@@ -681,7 +690,7 @@ class ElasticSearchEngine(SearchEngine):
                 return
 
             except Exception as e:
-                log.exception('error while deleting index - %s'.format(e.message))
+                log.exception('error while deleting index - %s', six.text_type(e))
 
     def remove(self, doc_type, doc_ids, **kwargs):
         """ Implements call to remove the documents from the index """
@@ -732,6 +741,7 @@ class ElasticSearchEngine(SearchEngine):
                exclude_ids=None,
                use_field_match=False,
                targeting_gate=None,
+               additional_filters=None,
                **kwargs):  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, arguments-differ
         """
         Implements call to search the index for the desired content.
@@ -772,6 +782,9 @@ class ElasticSearchEngine(SearchEngine):
             targeting_gate (dict): optional audience-targeting gate
             (``flag_field``, ``key_field``, ``allowed``). When set, documents with
             ``flag_field`` true are kept only if ``key_field`` is in ``allowed``.
+
+            additional_filters (list): optional raw ES 1.x filter clauses appended
+            after ``filter_dictionary`` processing.
 
             (deprecated) exclude_ids (list): list of id values to exclude from the results -
             useful for finding maches that aren't "one of these"
@@ -838,6 +851,7 @@ class ElasticSearchEngine(SearchEngine):
                 exclude_dictionary=exclude_dictionary,
                 exclude_ids=exclude_ids,
                 use_field_match=use_field_match,
+                additional_filters=additional_filters,
                 targeting_gate=targeting_gate,
             ),
         }
@@ -886,7 +900,7 @@ class ElasticSearchEngine(SearchEngine):
                 raise QueryParseError('Malformed search query.')
             else:
                 # log information and re-raise
-                log.exception("error while searching index - %s", ex.message)
+                log.exception("error while searching index - %s", message)
                 raise
 
         return _translate_hits(es_response, total_keys)

@@ -1,11 +1,20 @@
+# -*- coding: utf-8 -*-
 """ Tests for MockSearchEngine specific features """
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from datetime import datetime
 
 import pytz
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from search.tests.mock_search_engine import _find_field, _filter_intersection, json_date_to_datetime
+from search.api import _format_filter
+from search.tests.mock_search_engine import (
+    _find_field,
+    _filter_intersection,
+    _unwrap_discovery_filter,
+    json_date_to_datetime,
+)
 from search.tests.utils import SearcherMixin
 from search.utils import DateRange
 
@@ -69,6 +78,68 @@ class MockSpecificSearchTests(TestCase, SearcherMixin):
         """ Make sure that intersection optimizes return when no filter dictionary is provided """
         test_docs = [{"A": {"X": 1, "Y": 2, "Z": 3}}, {"B": {"X": 9, "Y": 8, "Z": 7}}]
         self.assertTrue(_filter_intersection(test_docs, None), test_docs)
+
+    def test_unwrap_discovery_filter_recognizes_format_filter_shape(self):
+        wrapped = _format_filter("released", missing_included=False)
+        value, include_missing = _unwrap_discovery_filter(wrapped, default_include_blanks=True)
+        self.assertEqual(value, "released")
+        self.assertFalse(include_missing)
+
+    def test_unwrap_discovery_filter_ignores_literal_value_dict(self):
+        literal = {"value": "x"}
+        value, include_missing = _unwrap_discovery_filter(literal, default_include_blanks=True)
+        self.assertEqual(value, literal)
+        self.assertTrue(include_missing)
+
+    def test_filter_intersection_applies_discovery_wrapper(self):
+        docs = [
+            {"id": "with-end", "end": datetime(2099, 1, 1)},
+            {"id": "missing-end"},
+        ]
+        filtered = _filter_intersection(
+            docs,
+            {"end": _format_filter(DateRange(datetime.utcnow(), None), missing_included=True)},
+            include_blanks=False,
+        )
+        self.assertEqual(
+            sorted(doc["id"] for doc in filtered),
+            ["missing-end", "with-end"],
+        )
+
+        filtered_no_missing = _filter_intersection(
+            docs,
+            {"end": _format_filter(DateRange(datetime.utcnow(), None), missing_included=False)},
+            include_blanks=True,
+        )
+        self.assertEqual([doc["id"] for doc in filtered_no_missing], ["with-end"])
+
+    def test_filter_intersection_literal_value_dict_is_not_unwrapped(self):
+        """
+        A filter value of ``{'value': 'x'}`` (no ``missing_included``) must not be
+        treated as ``_format_filter('x')``.
+        """
+        docs = [
+            {"id": "has-x", "meta": "x"},
+            {"id": "missing"},
+        ]
+        # Discovery wrapper: match value ``x``, and keep docs missing the field.
+        wrapped = _filter_intersection(
+            docs,
+            {"meta": _format_filter("x", missing_included=True)},
+            include_blanks=False,
+        )
+        self.assertEqual(
+            sorted(doc["id"] for doc in wrapped),
+            ["has-x", "missing"],
+        )
+
+        # Literal dict: equality against ``{'value': 'x'}``, missing field excluded.
+        literal = _filter_intersection(
+            docs,
+            {"meta": {"value": "x"}},
+            include_blanks=False,
+        )
+        self.assertEqual(literal, [])
 
     def test_datetime_conversion(self):
         """ tests json_date_to_datetime with different formats """

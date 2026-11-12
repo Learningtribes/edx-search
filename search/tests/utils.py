@@ -60,6 +60,10 @@ class ForceRefreshElasticSearchEngine(ElasticSearchEngine):
         super(ForceRefreshElasticSearchEngine, self).remove(doc_type, doc_ids, **kwargs)
 
 
+class SearchFailure(Exception):
+    """Backend failure raised by the erroring test engines."""
+
+
 class ErroringSearchEngine(MockSearchEngine):
     """ Override to generate search engine error to test """
 
@@ -68,14 +72,14 @@ class ErroringSearchEngine(MockSearchEngine):
                field_dictionary=None,
                filter_dictionary=None,
                **kwargs):  # pylint: disable=arguments-differ
-        raise StandardError("There is a problem here")
+        raise SearchFailure("There is a problem here")
 
 
 class ErroringIndexEngine(MockSearchEngine):
     """ Override to generate search engine error to test """
 
     def index(self, doc_type, sources, **kwargs):  # pylint: disable=unused-argument, arguments-differ
-        raise StandardError("There is a problem here")
+        raise SearchFailure("There is a problem here")
 
 
 class ErroringElasticImpl(Elasticsearch):

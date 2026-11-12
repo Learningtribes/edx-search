@@ -10,14 +10,28 @@ from mock import patch
 
 from search.api import (
     PROGRAM_FIELD_NULL_VALUE,
+    mixed_content_discovery_search,
     program_not_archived_filter,
     programs_discovery_search,
 )
 from search.elastic import build_elasticsearch_query_dict
+from search.filter_generator import SearchFilterGenerator as CourseSearchFilterGenerator
 from search.tests.mock_search_engine import (
     MockSearchEngine,
     _document_matches_es_filter,
 )
+from search.utils import DateRange
+
+
+class ExcludingArchivedCourseFilterGenerator(CourseSearchFilterGenerator):
+    """Course generator that requests exclude=archived (Studio/LMS home shape)."""
+
+    def field_dictionary(self, **kwargs):
+        fields = super(
+            ExcludingArchivedCourseFilterGenerator, self
+        ).field_dictionary(**kwargs)
+        fields['exclude'] = 'archived'
+        return fields
 
 
 @override_settings(SEARCH_ENGINE="search.tests.mock_search_engine.MockSearchEngine")
@@ -132,3 +146,54 @@ class ProgramNotArchivedFilterTest(TestCase):
 
         ids = sorted(hit['data']['id'] for hit in results['results'])
         self.assertEqual(ids, ['kept-draft', 'kept-running'])
+
+
+@override_settings(
+    SEARCH_FILTER_GENERATOR=(
+        "search.tests.test_program_archived_filter.ExcludingArchivedCourseFilterGenerator"
+    )
+)
+@override_settings(COURSEWARE_INDEX_NAME="courseware_index")
+@override_settings(PROGRAM_INDEX_NAME="program_index")
+class MixedDiscoveryArchivedFilterTest(TestCase):
+    """mixed_content_discovery_search wires exclude=archived per index semantics."""
+
+    @patch('search.api.process_range_data', side_effect=lambda results: results)
+    @patch('search.elastic.search_mixed_discovery')
+    @patch('search.elastic.build_elasticsearch_query_dict')
+    @patch('search.api.SearchEngine.get_search_engine')
+    def test_mixed_exclude_archived_uses_end_for_courses_and_canonical_for_programs(
+            self, mock_get_engine, mock_build_query, mock_mixed_search, _mock_process):
+        from search.elastic import ElasticSearchEngine
+
+        mock_get_engine.return_value = object.__new__(ElasticSearchEngine)
+        mock_build_query.side_effect = [{'match_all': {}}, {'match_all': {}}]
+        mock_mixed_search.return_value = {
+            'took': 1, 'total': 0, 'results': [], 'facets': {},
+        }
+
+        sentinel = {'or': [{'term': {'released_date': 'sentinel-keep'}}]}
+        with patch(
+            'search.api.program_not_archived_filter',
+            return_value=sentinel,
+        ) as mock_program_filter:
+            mixed_content_discovery_search(
+                program_field_dictionary={'exclude': 'archived'},
+            )
+
+        mock_program_filter.assert_called_once_with(now=None)
+        self.assertEqual(mock_build_query.call_count, 2)
+
+        course_call = mock_build_query.call_args_list[0]
+        program_call = mock_build_query.call_args_list[1]
+
+        course_filter_dictionary = course_call[0][2]
+        self.assertIn('end', course_filter_dictionary)
+        self.assertTrue(
+            isinstance(course_filter_dictionary['end']['value'], DateRange)
+        )
+        self.assertNotIn('additional_filters', course_call[1])
+
+        self.assertEqual(program_call[1].get('additional_filters'), [sentinel])
+        program_filter_dictionary = program_call[0][2]
+        self.assertNotIn('end', program_filter_dictionary)

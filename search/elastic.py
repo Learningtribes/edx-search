@@ -741,6 +741,7 @@ class ElasticSearchEngine(SearchEngine):
                exclude_ids=None,
                use_field_match=False,
                targeting_gate=None,
+               additional_filters=None,
                **kwargs):  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, arguments-differ
         """
         Implements call to search the index for the desired content.
@@ -781,6 +782,9 @@ class ElasticSearchEngine(SearchEngine):
             targeting_gate (dict): optional audience-targeting gate
             (``flag_field``, ``key_field``, ``allowed``). When set, documents with
             ``flag_field`` true are kept only if ``key_field`` is in ``allowed``.
+
+            additional_filters (list): optional raw ES 1.x filter clauses appended
+            after ``filter_dictionary`` processing.
 
             (deprecated) exclude_ids (list): list of id values to exclude from the results -
             useful for finding maches that aren't "one of these"
@@ -839,7 +843,6 @@ class ElasticSearchEngine(SearchEngine):
                 }
             )
         """
-        additional_filters = kwargs.pop('additional_filters', None)
         body = {
             "query": build_elasticsearch_query_dict(
                 query_strings=query_strings,

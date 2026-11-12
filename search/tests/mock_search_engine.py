@@ -44,9 +44,7 @@ def _find_field(doc, field_name):
     immediate_field, remaining_path = field_name.split('.', 1) if '.' in field_name else (field_name, None)
     field_value = doc.get(immediate_field)
 
-    # Only descend when a dotted path remains; otherwise the dict itself is the value
-    # (needed for equality checks against literal nested objects).
-    if isinstance(field_value, dict) and remaining_path is not None:
+    if isinstance(field_value, dict):
         return _find_field(field_value, remaining_path)
 
     return field_value
@@ -217,9 +215,12 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
 
 def _process_query_string(documents_to_search, query_string):
     """ keep the documents that contain at least one of the search strings provided """
-    def _encode_string(string):
-        """Encode a Unicode string in the same way as the Elasticsearch search engine."""
-        return string.encode('utf-8').translate(None, RESERVED_CHARACTERS)
+    def _normalize(text):
+        """Drop reserved characters and lowercase, as text (Py2 and Py3)."""
+        if isinstance(text, six.binary_type):
+            text = text.decode('utf-8')
+        text = six.text_type(text)
+        return ''.join(ch for ch in text if ch not in RESERVED_CHARACTERS).lower()
 
     def has_string(dictionary_object, search_string):
         """ search for string in dictionary items, look down into nested dictionaries """
@@ -227,11 +228,11 @@ def _process_query_string(documents_to_search, query_string):
             if isinstance(dictionary_object[name], dict):
                 return has_string(dictionary_object[name], search_string)
             elif dictionary_object[name]:
-                if search_string.lower() in _encode_string(dictionary_object[name].lower()):
+                if search_string in _normalize(dictionary_object[name]):
                     return True
         return False
 
-    search_strings = _encode_string(query_string).split(" ")
+    search_strings = _normalize(query_string).split(" ")
     documents_to_keep = []
     for search_string in search_strings:
         documents_to_keep.extend(
@@ -471,6 +472,7 @@ class MockSearchEngine(SearchEngine):
                exclude_dictionary=None,
                facet_terms=None,
                targeting_gate=None,
+               additional_filters=None,
                **kwargs):  # pylint: disable=too-many-arguments
         """ Perform search upon documents within index """
         if MockSearchEngine._disabled:
@@ -495,7 +497,6 @@ class MockSearchEngine(SearchEngine):
         if filter_dictionary:
             documents_to_search = _filter_intersection(documents_to_search, filter_dictionary, True)
 
-        additional_filters = kwargs.pop('additional_filters', None)
         if additional_filters:
             documents_to_search = _apply_additional_filters(
                 documents_to_search, additional_filters

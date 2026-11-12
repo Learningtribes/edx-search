@@ -44,8 +44,8 @@ class SearchResultProcessor(object):
     @staticmethod
     def strings_in_dictionary(dictionary):
         """ Used by default implementation for finding excerpt """
-        strings = [value for value in dictionary.itervalues() if not isinstance(value, dict)]
-        for child_dict in [dv for dv in dictionary.itervalues() if isinstance(dv, dict)]:
+        strings = [value for value in six.itervalues(dictionary) if not isinstance(value, dict)]
+        for child_dict in [dv for dv in six.itervalues(dictionary) if isinstance(dv, dict)]:
             strings.extend(SearchResultProcessor.strings_in_dictionary(child_dict))
         return strings
 
@@ -131,10 +131,19 @@ class SearchResultProcessor(object):
             return None
 
         match_phrases = [self._match_phrase]
-        separate_phrases = [
-            phrase.decode('utf-8')
-            for phrase in shlex.split(self._match_phrase.encode('utf-8'))
-        ]
+        match_phrase = self._match_phrase
+        # shlex.split wants bytes on Py2 and text on Py3.
+        if six.PY2:
+            if isinstance(match_phrase, six.text_type):
+                match_phrase = match_phrase.encode('utf-8')
+            separate_phrases = [
+                phrase.decode('utf-8') if isinstance(phrase, six.binary_type) else phrase
+                for phrase in shlex.split(match_phrase)
+            ]
+        else:
+            if isinstance(match_phrase, six.binary_type):
+                match_phrase = match_phrase.decode('utf-8')
+            separate_phrases = shlex.split(match_phrase)
         if len(separate_phrases) > 1:
             match_phrases.extend(separate_phrases)
         else:

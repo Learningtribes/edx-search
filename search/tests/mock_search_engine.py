@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 import os
 import pytz
+import six
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
@@ -37,7 +38,7 @@ def _find_field(doc, field_name):
     if not isinstance(doc, dict):
         raise ValueError('Parameter `doc` should be a python dict object')
 
-    if not isinstance(field_name, basestring):
+    if not isinstance(field_name, six.string_types):
         raise ValueError('Parameter `field_name` should be a string')
 
     immediate_field, remaining_path = field_name.split('.', 1) if '.' in field_name else (field_name, None)
@@ -47,6 +48,82 @@ def _find_field(doc, field_name):
         return _find_field(field_value, remaining_path)
 
     return field_value
+
+
+def _document_matches_es_filter(document, es_filter):
+    """
+    Evaluate a small subset of ES 1.x filter DSL against an in-memory document.
+    Supports ``or``, ``missing``, ``term``, and ``range`` (gte/lte/gt/lt).
+    """
+    if not es_filter:
+        return True
+
+    if 'or' in es_filter:
+        return any(
+            _document_matches_es_filter(document, clause)
+            for clause in es_filter['or']
+        )
+
+    if 'and' in es_filter:
+        return all(
+            _document_matches_es_filter(document, clause)
+            for clause in es_filter['and']
+        )
+
+    if 'missing' in es_filter:
+        field = es_filter['missing']['field']
+        return _find_field(document, field) is None
+
+    if 'term' in es_filter:
+        field, expected = next(iter(es_filter['term'].items()))
+        return _find_field(document, field) == expected
+
+    if 'range' in es_filter:
+        field, bounds = next(iter(es_filter['range'].items()))
+        compare_value = _find_field(document, field)
+        if compare_value is None:
+            return False
+        if isinstance(compare_value, six.string_types) and (
+            'T' in compare_value or len(compare_value) == 10
+        ):
+            try:
+                compare_value = json_date_to_datetime(compare_value)
+            except ValueError:
+                pass
+
+        def _bound(raw):
+            if isinstance(raw, six.string_types) and ('T' in raw or len(raw) == 10):
+                try:
+                    return json_date_to_datetime(raw)
+                except ValueError:
+                    return raw
+            return raw
+
+        if 'gte' in bounds and not (compare_value >= _bound(bounds['gte'])):
+            return False
+        if 'gt' in bounds and not (compare_value > _bound(bounds['gt'])):
+            return False
+        if 'lte' in bounds and not (compare_value <= _bound(bounds['lte'])):
+            return False
+        if 'lt' in bounds and not (compare_value < _bound(bounds['lt'])):
+            return False
+        return True
+
+    return False
+
+
+def _apply_additional_filters(documents_to_search, additional_filters):
+    """Keep documents that match every raw ES filter in ``additional_filters``."""
+    if not additional_filters:
+        return documents_to_search
+    return [
+        document
+        for document in documents_to_search
+        if all(
+            _document_matches_es_filter(document, es_filter)
+            for es_filter in additional_filters
+        )
+    ]
 
 
 def _filter_intersection(documents_to_search, dictionary_object, include_blanks=False):
@@ -61,13 +138,20 @@ def _filter_intersection(documents_to_search, dictionary_object, include_blanks=
         """
         Does the document's field match the desired value, or is the field not present if include_blanks is True
         """
+        # Unwrap discovery-style filter dicts: {'value': ..., 'missing_included': ...}
+        if isinstance(field_value, dict) and 'value' in field_value:
+            include_missing = field_value.get('missing_included', include_blanks)
+            field_value = field_value['value']
+        else:
+            include_missing = include_blanks
+
         compare_value = _find_field(doc, field_name)
         if compare_value is None:
-            return include_blanks
+            return include_missing
 
         # if we have a string that we are trying to process as a date object
         if isinstance(field_value, (DateRange, datetime)):
-            if isinstance(compare_value, basestring):
+            if isinstance(compare_value, six.string_types):
                 compare_value = json_date_to_datetime(compare_value)
 
             field_has_tz_info = False
@@ -361,6 +445,12 @@ class MockSearchEngine(SearchEngine):
 
         if filter_dictionary:
             documents_to_search = _filter_intersection(documents_to_search, filter_dictionary, True)
+
+        additional_filters = kwargs.pop('additional_filters', None)
+        if additional_filters:
+            documents_to_search = _apply_additional_filters(
+                documents_to_search, additional_filters
+            )
 
         if query_string:
             documents_to_search = _process_query_string(documents_to_search, query_string)

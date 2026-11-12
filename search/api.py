@@ -190,6 +190,40 @@ def _format_filter(filter, missing_included=True):
     return {'value': filter, 'missing_included': missing_included}
 
 
+# Matches PartialProgram.DEF_FIELD_NULL_VALUE in the platform index payload.
+PROGRAM_FIELD_NULL_VALUE = 'is_null'
+
+
+def program_not_archived_filter(now=None):
+    """
+    ES 1.x filter keeping programs that are not canonically archived.
+
+    Canonical program archived = released_date is set (not missing / is_null)
+    AND end is set and end < now. Inverse keep condition used at query time so
+    drafts with a past end stay visible and status flips without reindex.
+    """
+    if now is None:
+        now = datetime.utcnow()
+    now_iso = now.isoformat() if hasattr(now, 'isoformat') else now
+    return {
+        'or': [
+            {'missing': {'field': 'released_date'}},
+            {'term': {'released_date': PROGRAM_FIELD_NULL_VALUE}},
+            {'term': {'released_date': ''}},
+            {'missing': {'field': 'end'}},
+            {'term': {'end': PROGRAM_FIELD_NULL_VALUE}},
+            {'range': {'end': {'gte': now_iso}}},
+        ]
+    }
+
+
+def _additional_filters_for_program_exclude(exclude, now=None):
+    """Build additional_filters list for program exclude=archived."""
+    if exclude == 'archived':
+        return [program_not_archived_filter(now=now)]
+    return []
+
+
 def process_range_data(results):
     """Mainly used for processing range datetime data, including `start` property and combined `status` property(`start` and `end`).
     """
@@ -530,18 +564,14 @@ def mixed_content_discovery_search(
         )
 
     exclude = use_field_dictionary.pop('exclude', None)
-    if 'archived' == exclude:
-        filter_dictionary.update(
-            {
-                'end': _format_filter(DateRange(datetime.utcnow(), None))
-            }
-        )
+    program_additional_filters = _additional_filters_for_program_exclude(exclude)
 
     q_program = build_elasticsearch_query_dict(
         search_terms_program,
         use_field_dictionary,
         filter_dictionary,
         exclude_dictionary,
+        additional_filters=program_additional_filters,
     )
 
     scopes = _normalize_index_scope(index_scope)
@@ -601,12 +631,7 @@ def programs_discovery_search(search_terms=None, size=20, from_=0, field_diction
         )
 
     exclude = use_field_dictionary.pop('exclude', None)
-    if 'archived' == exclude:
-        filter_dictionary.update(
-            {
-                'end': _format_filter(DateRange(datetime.utcnow(), None))
-            }
-        )
+    program_additional_filters = _additional_filters_for_program_exclude(exclude)
 
     if only_released_courses:
         filter_dictionary["course_status"] = _format_filter("released")
@@ -621,7 +646,8 @@ def programs_discovery_search(search_terms=None, size=20, from_=0, field_diction
         exclude_dictionary=exclude_dictionary,
         facet_terms=program_discovery_facets(),
         sort=sort_args,
-        ga_total=kwargs.pop('ga_total', False)
+        ga_total=kwargs.pop('ga_total', False),
+        additional_filters=program_additional_filters,
     )
 
     return process_range_data(results)

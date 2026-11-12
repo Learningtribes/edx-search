@@ -176,11 +176,15 @@ def build_elasticsearch_query_dict(
         filter_dictionary=None,
         exclude_dictionary=None,
         exclude_ids=None,
-        use_field_match=False
+        use_field_match=False,
+        additional_filters=None,
     ):
     """
     Build the Elasticsearch ``query`` object (inner body) used by ``search``,
     without facets, sort, or aggregations.
+
+    ``additional_filters`` is an optional list of raw ES 1.x filter clauses
+    appended after ``filter_dictionary`` processing (e.g. program not-archived).
     """
     query_strings = [] if not query_strings else query_strings
     query_strings = [query_strings] if isinstance(query_strings, six.string_types) else query_strings
@@ -226,6 +230,9 @@ def build_elasticsearch_query_dict(
 
     if filter_dictionary:
         elastic_filters.extend(_process_filters(filter_dictionary))
+
+    if additional_filters:
+        elastic_filters.extend(additional_filters)
 
     if exclude_ids:
         if not exclude_dictionary:
@@ -785,6 +792,7 @@ class ElasticSearchEngine(SearchEngine):
                 }
             )
         """
+        additional_filters = kwargs.pop('additional_filters', None)
         body = {
             "query": build_elasticsearch_query_dict(
                 query_strings=query_strings,
@@ -792,7 +800,8 @@ class ElasticSearchEngine(SearchEngine):
                 filter_dictionary=filter_dictionary,
                 exclude_dictionary=exclude_dictionary,
                 exclude_ids=exclude_ids,
-                use_field_match=use_field_match
+                use_field_match=use_field_match,
+                additional_filters=additional_filters,
             ),
         }
         if facet_terms:
